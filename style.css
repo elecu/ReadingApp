@@ -32,3 +32,4 @@ summary{cursor:pointer}
 .charts{display:grid;grid-template-columns:1fr;gap:12px;margin-top:10px}
 .chartBox{background:#0c0c0d;border:1px solid var(--line);border-radius:12px;padding:10px}
 canvas{width:100%;height:auto;border-radius:10px}
+.smallBtn{padding:6px 10px;font-size:12px}

@@ -7,17 +7,54 @@
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css" />
   <meta name="theme-color" content="#111111" />
-
-  <!-- Google Identity Services (optional Drive sync) -->
+  <meta name="description" content="Sprints + hyperfocus, multiple books, achievements, charts, and Story PNG export." />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <header class="wrap">
     <h1>Book Quest</h1>
-    <p class="muted">Sprints to get started. Hyperfocus allowed. Multiple books.</p>
+    <p class="muted">Sprints to get started. Hyperfocus allowed. Multiple books. Achievements + charts + Story PNG export.</p>
   </header>
 
   <main class="wrap grid">
+
+    <section class="card">
+      <h2>Dashboard</h2>
+
+      <div class="row two">
+        <div>
+          <label>Stats range (applies to book + overall)</label>
+          <select id="rangeSelect">
+            <option value="7">7 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="90">3 months</option>
+            <option value="180">6 months</option>
+            <option value="365">1 year</option>
+          </select>
+        </div>
+        <div>
+          <label>Story export scope</label>
+          <select id="storyScope">
+            <option value="book">Active book</option>
+            <option value="overall">Overall</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="statLabel">Level</div><div class="statVal" id="level">—</div></div>
+        <div class="stat"><div class="statLabel">XP</div><div class="statVal" id="xp">—</div></div>
+        <div class="stat"><div class="statLabel">Streak</div><div class="statVal" id="streak">—</div></div>
+        <div class="stat"><div class="statLabel">Daily quest</div><div class="statVal" id="dailyQuest">—</div></div>
+      </div>
+
+      <div class="row">
+        <button id="makeStory" class="btn primary">Generate Story PNG</button>
+        <button id="downloadStory" class="btn" disabled>Download Story PNG</button>
+      </div>
+      <p class="muted small" id="storyHint">Generates a 1080×1920 PNG you can post to Instagram Stories.</p>
+      <canvas id="storyCanvas" width="1080" height="1920" style="display:none;"></canvas>
+    </section>
 
     <section class="card">
       <h2>Books</h2>
@@ -28,14 +65,10 @@
           <select id="bookSelect"></select>
         </div>
         <div>
-          <label>Stats range</label>
-          <select id="rangeSelect">
-            <option value="7">7 days</option>
-            <option value="30">30 days</option>
-            <option value="90">3 months</option>
-            <option value="180">6 months</option>
-            <option value="365">1 year</option>
-          </select>
+          <label>Quick actions</label>
+          <div class="row" style="margin:0">
+            <button id="markFinished" class="btn ghost">Mark finished</button>
+          </div>
         </div>
       </div>
 
@@ -139,12 +172,18 @@
 
       <div class="charts">
         <div class="chartBox">
-          <div class="muted small">Pages per day</div>
-          <canvas id="chartPages" width="600" height="220"></canvas>
+          <div class="row" style="margin:0 0 6px 0; align-items:center;">
+            <div class="muted small" style="flex:1;">Pages per day</div>
+            <button id="dlBookPages" class="btn ghost smallBtn">Download PNG</button>
+          </div>
+          <canvas id="chartPages" width="700" height="260"></canvas>
         </div>
         <div class="chartBox">
-          <div class="muted small">Minutes per day</div>
-          <canvas id="chartMins" width="600" height="220"></canvas>
+          <div class="row" style="margin:0 0 6px 0; align-items:center;">
+            <div class="muted small" style="flex:1;">Minutes per day</div>
+            <button id="dlBookMins" class="btn ghost smallBtn">Download PNG</button>
+          </div>
+          <canvas id="chartMins" width="700" height="260"></canvas>
         </div>
       </div>
     </section>
@@ -157,6 +196,40 @@
         <div class="stat"><div class="statLabel">Pages (in range)</div><div class="statVal" id="pagesRange">—</div></div>
         <div class="stat"><div class="statLabel">Minutes (in range)</div><div class="statVal" id="minsRange">—</div></div>
       </div>
+
+      <div class="charts">
+        <div class="chartBox">
+          <div class="row" style="margin:0 0 6px 0; align-items:center;">
+            <div class="muted small" style="flex:1;">Overall pages per day</div>
+            <button id="dlAllPages" class="btn ghost smallBtn">Download PNG</button>
+          </div>
+          <canvas id="chartAllPages" width="700" height="260"></canvas>
+        </div>
+        <div class="chartBox">
+          <div class="row" style="margin:0 0 6px 0; align-items:center;">
+            <div class="muted small" style="flex:1;">Overall minutes per day</div>
+            <button id="dlAllMins" class="btn ghost smallBtn">Download PNG</button>
+          </div>
+          <canvas id="chartAllMins" width="700" height="260"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Achievements</h2>
+      <div class="row two">
+        <div class="stat" style="width:100%;">
+          <div class="statLabel">Unlocked</div>
+          <div class="statVal" id="achUnlocked">—</div>
+          <div class="muted small" id="achUnlockedList">—</div>
+        </div>
+        <div class="stat" style="width:100%;">
+          <div class="statLabel">Next up</div>
+          <div class="statVal" id="achNext">—</div>
+          <div class="muted small" id="achNextList">—</div>
+        </div>
+      </div>
+      <p class="muted small">Achievements are lifetime. Quests reset daily/weekly.</p>
     </section>
 
     <section class="card">

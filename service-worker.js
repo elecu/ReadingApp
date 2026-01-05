@@ -1,4 +1,4 @@
-const CACHE="bookquest-cache-v2";
+const CACHE="bookquest-cache-v3";
 const ASSETS=["./","./index.html","./style.css","./app.js","./manifest.json"];
 
 self.addEventListener("install",(e)=>{
