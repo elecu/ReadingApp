@@ -2,6 +2,9 @@
    Data:
      - LocalStorage always
      - Optional Google Drive (appDataFolder) if you paste OAuth Client ID
+   Optional preset:
+     - If you add config.js that sets window.BOOKQUEST_CONFIG.googleClientId,
+       we auto-fill it once into state.drive.clientId.
 */
 
 (() => {
@@ -20,6 +23,9 @@
   // -------------------------
   const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
   const DRIVE_FILENAME = "bookquest.json";
+
+  // Disable Google API key field for now (not needed for GIS + Drive REST)
+  const DISABLE_GOOGLE_API_KEY_FIELD = true;
 
   // -------------------------
   // DOM helpers
@@ -60,7 +66,13 @@
   function fmtDateTime(iso) {
     try {
       const d = new Date(iso);
-      return d.toLocaleString("en-GB", { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      return d.toLocaleString("en-GB", {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
     } catch {
       return iso;
     }
@@ -164,7 +176,7 @@
         lastSavedAt: "",
         lastPulledAt: "",
         clientId: "",
-        apiKey: ""
+        apiKey: "" // disabled for now
       }
     };
   }
@@ -184,6 +196,10 @@
       if (!Array.isArray(s.quotes)) s.quotes = [];
       if (!s.gamification) s.gamification = defaultState().gamification;
       if (!s.drive) s.drive = defaultState().drive;
+
+      // Disable API key option for now (clear any stored value)
+      if (DISABLE_GOOGLE_API_KEY_FIELD && s.drive && s.drive.apiKey) s.drive.apiKey = "";
+
       return s;
     } catch {
       return defaultState();
@@ -243,7 +259,6 @@
     ctx.fillRect(0, 0, W, H);
 
     // padding
-    const pad = 44;
     const top = 26;
     const left = 48;
     const right = 20;
@@ -332,7 +347,6 @@
     const pad = 74;
     const leftW = 640;
     const rightX = 720;
-    const topY = 120;
 
     // header
     ctx.fillStyle = "rgba(242,243,244,0.95)";
@@ -406,7 +420,6 @@
       card(pad + 340, 340, 320, 150, "Remaining", `${stats.book.remainingPages} pages`);
       card(pad, 510, 320, 150, "Pace", stats.book.paceTxt);
       card(pad + 340, 510, 320, 150, "ETA", stats.book.etaTxt);
-
     } else {
       ctx.fillStyle = "rgba(242,243,244,0.95)";
       ctx.font = "800 44px system-ui, -apple-system, Segoe UI";
@@ -422,7 +435,13 @@
     // footer
     ctx.fillStyle = "rgba(169,172,181,0.95)";
     ctx.font = "500 24px system-ui, -apple-system, Segoe UI";
-    const stamp = new Date(nowMs()).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    const stamp = new Date(nowMs()).toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
     ctx.fillText(stamp, pad, H - 60);
 
     // preview
@@ -563,12 +582,12 @@
   }
 
   function getActiveBook() {
-    return state.books.find(b => b.id === state.activeBookId) || state.books[0];
+    return state.books.find((b) => b.id === state.activeBookId) || state.books[0];
   }
 
   function sessionsInRange(days) {
     const startIso = days >= 99999 ? "1970-01-01T00:00:00.000Z" : daysAgoISO(days, nowMs());
-    return state.sessions.filter(s => s.endedAt >= startIso);
+    return state.sessions.filter((s) => s.endedAt >= startIso);
   }
 
   function computePaceGlobal() {
@@ -579,7 +598,7 @@
   }
 
   function computeBookPace(bookId) {
-    const ss = state.sessions.filter(s => s.bookId === bookId);
+    const ss = state.sessions.filter((s) => s.bookId === bookId);
     const mins = ss.reduce((a, s) => a + (Number(s.minutes) || 0), 0);
     const pages = ss.reduce((a, s) => a + (Number(s.pages) || 0), 0);
     if (mins <= 0 || pages <= 0) return null;
@@ -595,18 +614,18 @@
     const overallMins = inRange.reduce((a, s) => a + (Number(s.minutes) || 0), 0);
 
     // book
-    const bookSessions = inRange.filter(s => s.bookId === b.id);
+    const bookSessions = inRange.filter((s) => s.bookId === b.id);
     const bookPages = bookSessions.reduce((a, s) => a + (Number(s.pages) || 0), 0);
     const bookMins = bookSessions.reduce((a, s) => a + (Number(s.minutes) || 0), 0);
 
     const total = Number(b.totalPages) || 0;
     const curr = Number(b.currentPage) || 0;
-    const remaining = Math.max(0, total > 0 ? (total - curr) : 0);
+    const remaining = Math.max(0, total > 0 ? total - curr : 0);
     const progressPct = total > 0 ? Math.round((curr / total) * 100) : 0;
 
     const pace = computeBookPace(b.id) || computePaceGlobal();
     const paceTxt = pace ? `${pace.pagesPerMin.toFixed(2)} pages/min` : "—";
-    const etaMins = (pace && pace.pagesPerMin > 0) ? Math.round(remaining / pace.pagesPerMin) : 0;
+    const etaMins = pace && pace.pagesPerMin > 0 ? Math.round(remaining / pace.pagesPerMin) : 0;
     const etaTxt = total > 0 && pace ? fmtMinutes(etaMins) : "—";
 
     // streak
@@ -615,7 +634,7 @@
     return {
       overall: {
         books: state.books.length,
-        finished: state.books.filter(x => x.finishedAt).length,
+        finished: state.books.filter((x) => x.finishedAt).length,
         pages: overallPages,
         minutes: overallMins
       },
@@ -634,23 +653,23 @@
   function groupByDay(sessions, days) {
     // returns labels & values for last N days (inclusive)
     const end = new Date(nowMs());
-    end.setHours(0,0,0,0);
+    end.setHours(0, 0, 0, 0);
 
     const N = days >= 99999 ? 30 : days; // for all-time charts, show last 30 days
     const labels = [];
     const keys = [];
     for (let i = N - 1; i >= 0; i--) {
       const d = new Date(end.getTime() - i * 86400000);
-      const key = d.toISOString().slice(0,10);
+      const key = d.toISOString().slice(0, 10);
       keys.push(key);
       labels.push(d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }));
     }
-    const map = new Map(keys.map(k => [k, 0]));
+    const map = new Map(keys.map((k) => [k, 0]));
     for (const s of sessions) {
-      const k = String(s.endedAt).slice(0,10);
+      const k = String(s.endedAt).slice(0, 10);
       if (map.has(k)) map.set(k, map.get(k) + (s._val || 0));
     }
-    const values = keys.map(k => map.get(k) || 0);
+    const values = keys.map((k) => map.get(k) || 0);
     return { labels, values };
   }
 
@@ -671,12 +690,15 @@
   function ensureDailyQuest() {
     const dq = state.gamification.dailyQuest;
     const today = new Date(nowMs());
-    today.setHours(0,0,0,0);
-    const dkey = today.toISOString().slice(0,10);
+    today.setHours(0, 0, 0, 0);
+    const dkey = today.toISOString().slice(0, 10);
     if (dq.date !== dkey) {
       // adapt target based on user's median session length and pace
-      const minsList = state.sessions.map(s => Number(s.minutes) || 0).filter(x => x > 0).sort((a,b)=>a-b);
-      const med = minsList.length ? minsList[Math.floor(minsList.length/2)] : 8;
+      const minsList = state.sessions
+        .map((s) => Number(s.minutes) || 0)
+        .filter((x) => x > 0)
+        .sort((a, b) => a - b);
+      const med = minsList.length ? minsList[Math.floor(minsList.length / 2)] : 8;
       const targetMins = clamp(Math.round(med), 6, 25);
 
       const pace = computePaceGlobal();
@@ -709,7 +731,7 @@
   }
 
   function updateStreakOnSession(endedAtIso) {
-    const dayKey = String(endedAtIso).slice(0,10);
+    const dayKey = String(endedAtIso).slice(0, 10);
     const streak = state.gamification.streak;
     if (!streak.lastReadDate) {
       streak.days = 1;
@@ -735,9 +757,9 @@
   }
 
   function evaluateAchievements() {
-    const totalMins = state.sessions.reduce((a,s)=>a+(Number(s.minutes)||0),0);
-    const totalPages = state.sessions.reduce((a,s)=>a+(Number(s.pages)||0),0);
-    const finished = state.books.filter(b=>b.finishedAt).length;
+    const totalMins = state.sessions.reduce((a, s) => a + (Number(s.minutes) || 0), 0);
+    const totalPages = state.sessions.reduce((a, s) => a + (Number(s.pages) || 0), 0);
+    const finished = state.books.filter((b) => b.finishedAt).length;
     const quotesN = state.quotes.length;
     const streakDays = state.gamification.streak.days || 0;
 
@@ -763,7 +785,7 @@
 
   function recalcBooksFromSessions() {
     // recompute currentPage per book = max(toPage)
-    const byBook = new Map(state.books.map(b => [b.id, 0]));
+    const byBook = new Map(state.books.map((b) => [b.id, 0]));
     for (const s of state.sessions) {
       const tp = Number(s.toPage) || 0;
       if (byBook.has(s.bookId)) byBook.set(s.bookId, Math.max(byBook.get(s.bookId), tp));
@@ -798,7 +820,7 @@
     if (state.sessions.length > 2000) state.sessions = state.sessions.slice(-2000);
 
     // book progress
-    const b = state.books.find(x => x.id === bookId);
+    const b = state.books.find((x) => x.id === bookId);
     if (b) {
       b.currentPage = Math.max(Number(b.currentPage) || 0, Number(toPage) || 0);
       if ((Number(b.totalPages) || 0) > 0 && b.currentPage >= b.totalPages) {
@@ -815,7 +837,7 @@
   }
 
   function editSession(sessionId, patch) {
-    const idx = state.sessions.findIndex(s => s.id === sessionId);
+    const idx = state.sessions.findIndex((s) => s.id === sessionId);
     if (idx < 0) return;
     state.sessions[idx] = { ...state.sessions[idx], ...patch };
     recalcBooksFromSessions();
@@ -825,7 +847,7 @@
   }
 
   function deleteSession(sessionId) {
-    state.sessions = state.sessions.filter(s => s.id !== sessionId);
+    state.sessions = state.sessions.filter((s) => s.id !== sessionId);
     recalcBooksFromSessions();
     recomputeGamificationFromScratch();
     saveState();
@@ -840,9 +862,9 @@
     state.gamification.dailyQuest = { date: "", targetMins: 8, targetPages: 6, doneMins: 0, donePages: 0 };
 
     // rebuild streak from sessions (sorted by endedAt)
-    const sorted = [...state.sessions].sort((a,b)=> String(a.endedAt).localeCompare(String(b.endedAt)));
+    const sorted = [...state.sessions].sort((a, b) => String(a.endedAt).localeCompare(String(b.endedAt)));
     for (const s of sorted) {
-      addXP(Number(s.pages)||0, Number(s.minutes)||0);
+      addXP(Number(s.pages) || 0, Number(s.minutes) || 0);
       updateStreakOnSession(s.endedAt);
     }
 
@@ -864,7 +886,8 @@
   }
 
   function setDriveStatus(txt) {
-    $("driveStatus").textContent = txt;
+    const el = $("driveStatus");
+    if (el) el.textContent = txt;
   }
 
   async function ensureDriveToken(interactive = true) {
@@ -893,7 +916,6 @@
     }
 
     return new Promise((resolve, reject) => {
-      const prev = accessToken;
       tokenClient.callback = (resp) => {
         if (resp && resp.access_token) {
           accessToken = resp.access_token;
@@ -905,7 +927,6 @@
       };
       try {
         tokenClient.requestAccessToken({ prompt: interactive ? "consent" : "" });
-        if (prev && prev === accessToken) resolve(accessToken);
       } catch (e) {
         reject(e);
       }
@@ -973,25 +994,6 @@
     toast(`Saved to Drive (${fmtDateTime(state.drive.lastSavedAt)})`);
   }
 
-  async function drivePull() {
-    await ensureDriveToken(true);
-    let fileId = state.drive.fileId || "";
-    if (!fileId) fileId = await driveSearchFile();
-    if (!fileId) throw new Error("No BookQuest file found in appDataFolder");
-    state.drive.fileId = fileId;
-
-    const txt = await driveDownload(fileId);
-    const incoming = JSON.parse(txt);
-
-    // shallow validation
-    if (!incoming || !incoming.books || !incoming.sessions) throw new Error("Invalid data in Drive file");
-    state = incoming;
-    // ensure required fields exist
-    state = loadState(); // loadState reads LS; but we just set state. We'll manually normalise:
-    // We'll instead normalise directly:
-    // (re-load from LS would discard incoming, so don't.)
-  }
-
   function normaliseStateInPlace() {
     if (!state.version) state.version = 1;
     if (!state.settings) state.settings = { rangeDays: 30, storyScope: "book", driveAutoMins: 5 };
@@ -1001,6 +1003,9 @@
     if (!Array.isArray(state.quotes)) state.quotes = [];
     if (!state.gamification) state.gamification = defaultState().gamification;
     if (!state.drive) state.drive = defaultState().drive;
+
+    // Disable API key option for now (clear any stored value)
+    if (DISABLE_GOOGLE_API_KEY_FIELD && state.drive && state.drive.apiKey) state.drive.apiKey = "";
   }
 
   async function drivePullApply() {
@@ -1052,7 +1057,7 @@
     const pct = total > 0 ? Math.round((curr / total) * 100) : 0;
 
     const pace = computeBookPace(b.id) || computePaceGlobal();
-    const etaMins = (total > 0 && pace && pace.pagesPerMin > 0) ? Math.round(remaining / pace.pagesPerMin) : 0;
+    const etaMins = total > 0 && pace && pace.pagesPerMin > 0 ? Math.round(remaining / pace.pagesPerMin) : 0;
 
     const html = `
       <img class="cover" src="${b.coverDataUrl || ""}" alt="" style="${b.coverDataUrl ? "" : "display:none"}" />
@@ -1071,7 +1076,7 @@
     $("pace").textContent = pace ? `${pace.pagesPerMin.toFixed(2)} pages/min` : "—";
     $("eta").textContent = total && pace ? fmtMinutes(etaMins) : "—";
 
-    const inRange = sessionsInRange(state.settings.rangeDays).filter(s => s.bookId === b.id);
+    const inRange = sessionsInRange(state.settings.rangeDays).filter((s) => s.bookId === b.id);
     $("sessionsN").textContent = String(inRange.length);
   }
 
@@ -1082,10 +1087,8 @@
   function renderDashboardStats() {
     ensureDailyQuest();
     const dq = state.gamification.dailyQuest;
-    const dqDone = (dq.doneMins >= dq.targetMins) || (dq.donePages >= dq.targetPages);
-    $("dailyQuest").textContent = dqDone
-      ? `Complete ✓ (${Math.round(dq.doneMins)}m, ${Math.round(dq.donePages)}p)`
-      : `${dq.targetMins}m / ${dq.targetPages}p (today)`;
+    const dqDone = dq.doneMins >= dq.targetMins || dq.donePages >= dq.targetPages;
+    $("dailyQuest").textContent = dqDone ? `Complete ✓ (${Math.round(dq.doneMins)}m, ${Math.round(dq.donePages)}p)` : `${dq.targetMins}m / ${dq.targetPages}p (today)`;
 
     $("level").textContent = `Level ${state.gamification.level}`;
     $("xp").textContent = `${state.gamification.xp}/${state.gamification.level * 120}`;
@@ -1127,7 +1130,9 @@
 
     const unlockedList = $("achUnlockedList");
     unlockedList.innerHTML = "";
-    const unlockedItems = ACH.filter(a => unlocked[a.key]).sort((a,b)=> String(unlocked[a.key].unlockedAt).localeCompare(String(unlocked[b.key].unlockedAt)));
+    const unlockedItems = ACH.filter((a) => unlocked[a.key]).sort((a, b) =>
+      String(unlocked[a.key].unlockedAt).localeCompare(String(unlocked[b.key].unlockedAt))
+    );
     for (const a of unlockedItems) {
       const when = unlocked[a.key].unlockedAt;
       const div = document.createElement("div");
@@ -1146,7 +1151,7 @@
     // next up
     const nextList = $("achNextList");
     nextList.innerHTML = "";
-    const locked = ACH.filter(a => !unlocked[a.key]);
+    const locked = ACH.filter((a) => !unlocked[a.key]);
     if (locked.length === 0) {
       $("achNext").textContent = "All achievements unlocked.";
       return;
@@ -1154,7 +1159,10 @@
     $("achNext").textContent = "Closest achievements:";
 
     const progress = computeAchievementProgress();
-    const scored = locked.map(a => ({ a, p: progress[a.key] ?? 0 })).sort((x,y)=> y.p - x.p).slice(0,4);
+    const scored = locked
+      .map((a) => ({ a, p: progress[a.key] ?? 0 }))
+      .sort((x, y) => y.p - x.p)
+      .slice(0, 4);
     for (const x of scored) {
       const div = document.createElement("div");
       div.className = "item";
@@ -1168,9 +1176,9 @@
   }
 
   function computeAchievementProgress() {
-    const totalMins = state.sessions.reduce((a,s)=>a+(Number(s.minutes)||0),0);
-    const totalPages = state.sessions.reduce((a,s)=>a+(Number(s.pages)||0),0);
-    const finished = state.books.filter(b=>b.finishedAt).length;
+    const totalMins = state.sessions.reduce((a, s) => a + (Number(s.minutes) || 0), 0);
+    const totalPages = state.sessions.reduce((a, s) => a + (Number(s.pages) || 0), 0);
+    const finished = state.books.filter((b) => b.finishedAt).length;
     const quotesN = state.quotes.length;
     const streakDays = state.gamification.streak.days || 0;
 
@@ -1190,13 +1198,13 @@
     const b = getActiveBook();
     const list = $("quotesList");
     list.innerHTML = "";
-    const qs = state.quotes.filter(q => q.bookId === b.id).sort((a,b)=> String(b.createdAt).localeCompare(String(a.createdAt)));
+    const qs = state.quotes.filter((q) => q.bookId === b.id).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     for (const q of qs) {
       const div = document.createElement("div");
       div.className = "item";
       div.innerHTML = `
-        <div class="itemTitle">💬 ${escapeHtml((q.text || "").slice(0, 60))}${(q.text||"").length>60 ? "…" : ""}</div>
-        <div class="itemMeta">${escapeHtml([q.quoteAuthor, q.page ? "p. "+q.page : ""].filter(Boolean).join(" • "))}</div>
+        <div class="itemTitle">💬 ${escapeHtml((q.text || "").slice(0, 60))}${(q.text || "").length > 60 ? "…" : ""}</div>
+        <div class="itemMeta">${escapeHtml([q.quoteAuthor, q.page ? "p. " + q.page : ""].filter(Boolean).join(" • "))}</div>
         <div class="itemMeta">${fmtDateTime(q.createdAt)}</div>
         <div class="itemActions">
           <button class="btn" data-quote-export="${q.id}" type="button">Export PNG</button>
@@ -1213,9 +1221,9 @@
   function renderHistory() {
     const list = $("history");
     list.innerHTML = "";
-    const items = [...state.sessions].sort((a,b)=> String(b.endedAt).localeCompare(String(a.endedAt))).slice(0,50);
+    const items = [...state.sessions].sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt))).slice(0, 50);
     for (const s of items) {
-      const b = state.books.find(x => x.id === s.bookId);
+      const b = state.books.find((x) => x.id === s.bookId);
       const div = document.createElement("div");
       div.className = "item";
       div.innerHTML = `
@@ -1236,18 +1244,18 @@
   function renderCharts() {
     const days = state.settings.rangeDays;
     const startIso = days >= 99999 ? "1970-01-01T00:00:00.000Z" : daysAgoISO(days, nowMs());
-    const inRange = state.sessions.filter(s => s.endedAt >= startIso);
+    const inRange = state.sessions.filter((s) => s.endedAt >= startIso);
 
     const b = getActiveBook();
-    const bookSessions = inRange.filter(s => s.bookId === b.id);
+    const bookSessions = inRange.filter((s) => s.bookId === b.id);
 
     // pages per day
-    const bookPagesByDay = bookSessions.map(s => ({ ...s, _val: Number(s.pages)||0 }));
-    const overallPagesByDay = inRange.map(s => ({ ...s, _val: Number(s.pages)||0 }));
-    const bookMinsByDay = bookSessions.map(s => ({ ...s, _val: Number(s.minutes)||0 }));
-    const overallMinsByDay = inRange.map(s => ({ ...s, _val: Number(s.minutes)||0 }));
+    const bookPagesByDay = bookSessions.map((s) => ({ ...s, _val: Number(s.pages) || 0 }));
+    const overallPagesByDay = inRange.map((s) => ({ ...s, _val: Number(s.pages) || 0 }));
+    const bookMinsByDay = bookSessions.map((s) => ({ ...s, _val: Number(s.minutes) || 0 }));
+    const overallMinsByDay = inRange.map((s) => ({ ...s, _val: Number(s.minutes) || 0 }));
 
-    const N = (days >= 99999) ? 30 : days;
+    const N = days >= 99999 ? 30 : days;
     const bp = groupByDay(bookPagesByDay, N);
     const ap = groupByDay(overallPagesByDay, N);
     const bm = groupByDay(bookMinsByDay, N);
@@ -1262,7 +1270,20 @@
   function renderDrive() {
     $("driveAuto").value = String(state.settings.driveAutoMins || 0);
     $("googleClientId").value = state.drive.clientId || "";
-    $("googleApiKey").value = state.drive.apiKey || "";
+
+    // API key field disabled for now
+    const apiEl = $("googleApiKey");
+    if (apiEl) {
+      apiEl.value = "";
+      apiEl.disabled = true;
+      apiEl.placeholder = "Disabled";
+      if (DISABLE_GOOGLE_API_KEY_FIELD) {
+        // hide the field wrapper if possible
+        const wrap = apiEl.closest(".field") || apiEl.parentElement;
+        if (wrap) wrap.style.display = "none";
+        else apiEl.style.display = "none";
+      }
+    }
 
     if (!driveConfigured()) {
       setDriveStatus("Client ID missing");
@@ -1290,8 +1311,8 @@
   // Tabs
   // -------------------------
   function setTab(name) {
-    qsa(".tabbtn").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
-    qsa(".tab").forEach(s => s.classList.toggle("active", s.id === `tab-${name}`));
+    qsa(".tabbtn").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    qsa(".tab").forEach((s) => s.classList.toggle("active", s.id === `tab-${name}`));
     localStorage.setItem(LS_TAB, name);
   }
 
@@ -1347,7 +1368,7 @@
       const ls = Math.floor(left / 1000);
       const lmm = Math.floor(ls / 60);
       const lss = ls % 60;
-      $("timerHint").textContent = `Sprint ends in ${String(lmm).padStart(2,"0")}:${String(lss).padStart(2,"0")}.`;
+      $("timerHint").textContent = `Sprint ends in ${String(lmm).padStart(2, "0")}:${String(lss).padStart(2, "0")}.`;
       if (ms >= target) $("timerHint").textContent = "Sprint complete — end session or keep going.";
     } else {
       $("timerHint").textContent = "Open session running.";
@@ -1394,7 +1415,6 @@
       if (timer.running && timer.mode === "sprint") {
         const ms = timerElapsedMs();
         if (ms >= timer.sprintMins * 60 * 1000) {
-          // enable keep going UI message only
           $("timerHint").textContent = "Sprint complete — end session or keep going.";
         }
       }
@@ -1426,11 +1446,11 @@
 
     // default pages
     const b = getActiveBook();
-    const fromP = normaliseInt(timer.fromPage) ?? ((Number(b.currentPage) || 0) + 1);
+    const fromP = normaliseInt(timer.fromPage) ?? (Number(b.currentPage) || 0) + 1;
     $("endFromPage").value = String(fromP);
 
     if (sessionIdForEdit) {
-      const s = state.sessions.find(x => x.id === sessionIdForEdit);
+      const s = state.sessions.find((x) => x.id === sessionIdForEdit);
       if (s) {
         $("endFromPage").value = String(s.fromPage ?? fromP);
         $("endToPage").value = String(s.toPage ?? "");
@@ -1473,9 +1493,9 @@
 
   function getLastSessionForActiveBook() {
     const b = getActiveBook();
-    const ss = state.sessions.filter(s => s.bookId === b.id);
+    const ss = state.sessions.filter((s) => s.bookId === b.id);
     if (ss.length === 0) return null;
-    ss.sort((a,b)=> String(b.endedAt).localeCompare(String(a.endedAt)));
+    ss.sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt)));
     return ss[0];
   }
 
@@ -1531,7 +1551,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `bookquest-${new Date(nowMs()).toISOString().slice(0,10)}.json`;
+    a.download = `bookquest-${new Date(nowMs()).toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -1555,7 +1575,7 @@
   // -------------------------
   function bindEvents() {
     // tabs
-    qsa(".tabbtn").forEach(btn => {
+    qsa(".tabbtn").forEach((btn) => {
       btn.addEventListener("click", () => setTab(btn.dataset.tab));
     });
 
@@ -1598,8 +1618,12 @@
 
       const b = {
         id: uuid(),
-        title, author, publisher, edition,
-        totalPages, currentPage,
+        title,
+        author,
+        publisher,
+        edition,
+        totalPages,
+        currentPage,
         coverDataUrl,
         createdAt: nowISO(),
         finishedAt: ""
@@ -1650,9 +1674,9 @@
         return;
       }
       // delete sessions and quotes linked to book
-      state.sessions = state.sessions.filter(s => s.bookId !== b.id);
-      state.quotes = state.quotes.filter(q => q.bookId !== b.id);
-      state.books = state.books.filter(x => x.id !== b.id);
+      state.sessions = state.sessions.filter((s) => s.bookId !== b.id);
+      state.quotes = state.quotes.filter((q) => q.bookId !== b.id);
+      state.books = state.books.filter((x) => x.id !== b.id);
       state.activeBookId = state.books[0].id;
       recomputeGamificationFromScratch();
       saveState();
@@ -1680,11 +1704,27 @@
       renderTimerUI();
     });
 
-    $("fromPage").addEventListener("input", () => { timer.fromPage = $("fromPage").value; saveTimer(); });
-    $("toPage").addEventListener("input", () => { timer.toPage = $("toPage").value; saveTimer(); });
-    $("pagesRead").addEventListener("input", () => { timer.pagesRead = $("pagesRead").value; saveTimer(); });
-    $("mode").addEventListener("change", () => { timer.mode = $("mode").value; saveTimer(); renderTimerUI(); });
-    $("sprintMins").addEventListener("input", () => { timer.sprintMins = clamp(normaliseInt($("sprintMins").value) || 8, 1, 180); saveTimer(); });
+    $("fromPage").addEventListener("input", () => {
+      timer.fromPage = $("fromPage").value;
+      saveTimer();
+    });
+    $("toPage").addEventListener("input", () => {
+      timer.toPage = $("toPage").value;
+      saveTimer();
+    });
+    $("pagesRead").addEventListener("input", () => {
+      timer.pagesRead = $("pagesRead").value;
+      saveTimer();
+    });
+    $("mode").addEventListener("change", () => {
+      timer.mode = $("mode").value;
+      saveTimer();
+      renderTimerUI();
+    });
+    $("sprintMins").addEventListener("input", () => {
+      timer.sprintMins = clamp(normaliseInt($("sprintMins").value) || 8, 1, 180);
+      saveTimer();
+    });
 
     $("start").addEventListener("click", () => startTimer());
     $("pause").addEventListener("click", () => pauseTimer());
@@ -1731,7 +1771,7 @@
       $("storyHint").textContent = "Generating…";
       try {
         await drawStoryPNG(state.settings.storyScope);
-      } catch (e) {
+      } catch {
         $("storyHint").textContent = "Failed to render PNG.";
       }
     });
@@ -1739,7 +1779,7 @@
     $("downloadStory").addEventListener("click", () => {
       if (!storyLastUrl) return;
       const a = document.createElement("a");
-      a.download = `bookquest-story-${new Date(nowMs()).toISOString().slice(0,10)}.png`;
+      a.download = `bookquest-story-${new Date(nowMs()).toISOString().slice(0, 10)}.png`;
       a.href = storyLastUrl;
       a.click();
     });
@@ -1786,7 +1826,7 @@
     $("previewQuote").addEventListener("click", async () => {
       // preview last quote in active book
       const b = getActiveBook();
-      const qs = state.quotes.filter(q => q.bookId === b.id).sort((a,b)=> String(b.createdAt).localeCompare(String(a.createdAt)));
+      const qs = state.quotes.filter((q) => q.bookId === b.id).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
       if (!qs.length) return;
       await drawQuotePNG(qs[0]);
       $("downloadQuote").disabled = false;
@@ -1795,7 +1835,7 @@
     $("downloadQuote").addEventListener("click", () => {
       if (!quoteLastUrl) return;
       const a = document.createElement("a");
-      a.download = `bookquest-quote-${new Date(nowMs()).toISOString().slice(0,10)}.png`;
+      a.download = `bookquest-quote-${new Date(nowMs()).toISOString().slice(0, 10)}.png`;
       a.href = quoteLastUrl;
       a.click();
     });
@@ -1806,16 +1846,16 @@
       const ex = t.getAttribute("data-quote-export");
       const del = t.getAttribute("data-quote-del");
       if (ex) {
-        const q = state.quotes.find(x => x.id === ex);
+        const q = state.quotes.find((x) => x.id === ex);
         if (!q) return;
         const url = await drawQuotePNG(q);
         const a = document.createElement("a");
-        a.download = `bookquest-quote-${new Date(nowMs()).toISOString().slice(0,10)}.png`;
+        a.download = `bookquest-quote-${new Date(nowMs()).toISOString().slice(0, 10)}.png`;
         a.href = url;
         a.click();
       }
       if (del) {
-        state.quotes = state.quotes.filter(x => x.id !== del);
+        state.quotes = state.quotes.filter((x) => x.id !== del);
         saveState();
         toast("Quote deleted");
         renderQuotes();
@@ -1829,7 +1869,7 @@
       if (!f) return;
       try {
         await importJSON(f);
-      } catch (e) {
+      } catch {
         toast("Import failed");
       } finally {
         $("importFile").value = "";
@@ -1841,11 +1881,9 @@
       saveState();
       renderDrive();
     });
-    $("googleApiKey").addEventListener("input", () => {
-      state.drive.apiKey = $("googleApiKey").value.trim();
-      saveState();
-      renderDrive();
-    });
+
+    // Google API key input DISABLED for now: do not bind any listener.
+
     $("driveAuto").addEventListener("change", () => {
       state.settings.driveAutoMins = Number($("driveAuto").value) || 0;
       saveState();
@@ -1857,7 +1895,7 @@
       try {
         await ensureDriveToken(true);
         setupDriveAutosave();
-      } catch (e) {
+      } catch {
         toast("Sign-in failed");
       }
     });
@@ -1867,7 +1905,7 @@
         await ensureDriveToken(true);
         await drivePush();
         dirty = false;
-      } catch (e) {
+      } catch {
         toast("Save to Drive failed");
       }
     });
@@ -1875,7 +1913,7 @@
     $("drivePull").addEventListener("click", async () => {
       try {
         await drivePullApply();
-      } catch (e) {
+      } catch {
         toast("Pull failed");
       }
     });
@@ -1887,7 +1925,6 @@
 
     // keep timer alive if user changes tab visibility
     document.addEventListener("visibilitychange", () => {
-      // do nothing; timer is stored and interval updates
       saveTimer();
     });
 
@@ -1957,13 +1994,26 @@
 
   async function boot() {
     await syncServerTimeOnce();
+
     // after time sync, ensure state initialised with server time in this session
     if (!localStorage.getItem(LS_STATE)) {
       state = defaultState();
       saveState();
     } else {
-      // ensure daily quest exists
       ensureDailyQuest();
+    }
+
+    // ---- NEW: auto-fill clientId from window.BOOKQUEST_CONFIG once ----
+    const preset = (window.BOOKQUEST_CONFIG?.googleClientId || "").trim();
+    if (preset && !(state.drive.clientId || "").trim()) {
+      state.drive.clientId = preset;
+      saveState();
+    }
+
+    // Disable API key option for now (clear any stored value)
+    if (DISABLE_GOOGLE_API_KEY_FIELD) {
+      state.drive.apiKey = "";
+      saveState();
     }
 
     // restore settings into UI
@@ -1977,6 +2027,7 @@
       if (timerInterval) clearInterval(timerInterval);
       timerInterval = setInterval(renderTimerUI, 250);
     }
+
     bindEvents();
     renderAll();
     setupDriveAutosave();
@@ -1987,5 +2038,4 @@
   }
 
   boot();
-
 })();
