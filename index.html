@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Book Quest</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css" />
+  <meta name="theme-color" content="#111111" />
+
+  <!-- Google Identity Services (optional Drive sync) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <header class="wrap">
+    <h1>Book Quest</h1>
+    <p class="muted">Sprints to get started. Hyperfocus allowed. Multiple books.</p>
+  </header>
+
+  <main class="wrap grid">
+
+    <section class="card">
+      <h2>Books</h2>
+
+      <div class="row two">
+        <div>
+          <label>Active book</label>
+          <select id="bookSelect"></select>
+        </div>
+        <div>
+          <label>Stats range</label>
+          <select id="rangeSelect">
+            <option value="7">7 days</option>
+            <option value="30">30 days</option>
+            <option value="90">3 months</option>
+            <option value="180">6 months</option>
+            <option value="365">1 year</option>
+          </select>
+        </div>
+      </div>
+
+      <details>
+        <summary>Add a book</summary>
+        <div class="row">
+          <div style="flex:1; min-width:180px;">
+            <label>Title</label>
+            <input id="newTitle" placeholder="e.g. Canto 2 (edition X)" />
+          </div>
+        </div>
+        <div class="row two">
+          <div>
+            <label>Total pages to read (exclude blank pages)</label>
+            <input id="newTotal" type="number" min="1" placeholder="e.g. 320" />
+          </div>
+          <div>
+            <label>Current page (exclude blank pages)</label>
+            <input id="newCurrent" type="number" min="0" placeholder="e.g. 0" />
+          </div>
+        </div>
+        <div class="row">
+          <button id="addBook" class="btn">Add</button>
+        </div>
+      </details>
+
+      <details>
+        <summary>Edit active book</summary>
+        <div class="row">
+          <div style="flex:1; min-width:180px;">
+            <label>Title</label>
+            <input id="editTitle" />
+          </div>
+        </div>
+        <div class="row two">
+          <div>
+            <label>Total pages (exclude blank pages)</label>
+            <input id="editTotal" type="number" min="1" />
+          </div>
+          <div>
+            <label>Current page (exclude blank pages)</label>
+            <input id="editCurrent" type="number" min="0" />
+          </div>
+        </div>
+        <div class="row">
+          <button id="saveBook" class="btn primary">Save</button>
+          <button id="deleteBook" class="btn ghost">Delete book</button>
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>Session</h2>
+
+      <div class="row two">
+        <div>
+          <label>Mode</label>
+          <select id="mode">
+            <option value="sprint">Sprint</option>
+            <option value="flow">Flow</option>
+          </select>
+        </div>
+        <div>
+          <label>Sprint (minutes)</label>
+          <input id="sprintMins" type="number" min="1" value="8" />
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="start" class="btn primary">Start</button>
+        <button id="pause" class="btn" disabled>Pause</button>
+        <button id="finish" class="btn" disabled>End session</button>
+        <button id="hyper" class="btn ghost" disabled>Keep going (hyperfocus)</button>
+      </div>
+
+      <div class="timer">
+        <div class="timerBig" id="timerBig">00:00</div>
+        <div class="muted small" id="timerHint">Starting is the win.</div>
+      </div>
+
+      <div class="row">
+        <div style="flex:1; min-width:180px;">
+          <label>Pages read this session (exclude blank pages)</label>
+          <input id="pagesRead" type="number" min="0" placeholder="e.g. 6" />
+        </div>
+      </div>
+
+      <p class="muted small">
+        If you get into it and keep reading, brilliant — the sprint only pings; it does not stop you.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Active book stats</h2>
+      <div class="stats">
+        <div class="stat"><div class="statLabel">Progress</div><div class="statVal" id="progress">—</div></div>
+        <div class="stat"><div class="statLabel">Pace (average)</div><div class="statVal" id="pace">—</div></div>
+        <div class="stat"><div class="statLabel">ETA</div><div class="statVal" id="eta">—</div></div>
+        <div class="stat"><div class="statLabel">Sessions (in range)</div><div class="statVal" id="sessionsN">—</div></div>
+      </div>
+
+      <div class="charts">
+        <div class="chartBox">
+          <div class="muted small">Pages per day</div>
+          <canvas id="chartPages" width="600" height="220"></canvas>
+        </div>
+        <div class="chartBox">
+          <div class="muted small">Minutes per day</div>
+          <canvas id="chartMins" width="600" height="220"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Overall stats</h2>
+      <div class="stats">
+        <div class="stat"><div class="statLabel">Books</div><div class="statVal" id="booksCount">—</div></div>
+        <div class="stat"><div class="statLabel">Finished</div><div class="statVal" id="booksDone">—</div></div>
+        <div class="stat"><div class="statLabel">Pages (in range)</div><div class="statVal" id="pagesRange">—</div></div>
+        <div class="stat"><div class="statLabel">Minutes (in range)</div><div class="statVal" id="minsRange">—</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Sync</h2>
+
+      <details open>
+        <summary>Manual (recommended as a backup)</summary>
+        <div class="row">
+          <button id="exportBtn" class="btn">Export JSON</button>
+          <label class="btn ghost file">
+            Import JSON
+            <input id="importFile" type="file" accept="application/json" />
+          </label>
+        </div>
+        <p class="muted small">
+          Tip: use this to move your progress between devices without any sign-in.
+        </p>
+      </details>
+
+      <details>
+        <summary>Google Drive (automatic)</summary>
+        <p class="muted small">
+          Stores your progress as a JSON file in your Drive app data folder (hidden). If your e-reader browser is limited,
+          manual sync will be more reliable.
+        </p>
+        <div class="row">
+          <button id="driveSignIn" class="btn">Sign in with Google</button>
+          <button id="drivePull" class="btn ghost" disabled>Pull from Drive</button>
+          <button id="drivePush" class="btn primary" disabled>Save to Drive</button>
+        </div>
+        <div class="muted small" id="driveStatus">Not connected.</div>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>History (latest 25)</h2>
+      <div id="history" class="history"></div>
+    </section>
+
+  </main>
+
+  <footer class="wrap muted small">
+    <button id="resetAll" class="btn ghost">Full reset</button>
+    <span id="installHint" style="margin-left:10px;"></span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
