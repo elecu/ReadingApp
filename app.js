@@ -770,7 +770,7 @@ function setDriveUI(connected){
   $("driveStatus").textContent = connected ? "Connected." : "Not connected.";
 }
 function driveTokenClient(){
-  const CLIENT_ID = "PASTE_YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com";
+  const CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
   const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
 
   if(!window.google || !google.accounts || !google.accounts.oauth2){
