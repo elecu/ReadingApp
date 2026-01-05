@@ -1,17 +1,12 @@
-const CACHE="bookquest-cache-v4";
-const ASSETS=["./","./index.html","./style.css","./app.js","./manifest.json"];
+// Legacy SW cleanup: clears old caches and unregisters itself
+self.addEventListener("install", (e) => self.skipWaiting());
 
-self.addEventListener("install",(e)=>{
-  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
-});
-
-self.addEventListener("activate",(e)=>{
-  e.waitUntil(
-    caches.keys().then(keys=>Promise.all(keys.map(k=>k===CACHE?null:caches.delete(k))))
-    .then(()=>self.clients.claim())
-  );
-});
-
-self.addEventListener("fetch",(e)=>{
-  e.respondWith(caches.match(e.request).then(cached=>cached||fetch(e.request)));
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+    await self.registration.unregister();
+    const clients = await self.clients.matchAll({ type: "window" });
+    for (const c of clients) c.navigate(c.url);
+  })());
 });
