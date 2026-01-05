@@ -454,7 +454,7 @@ function setDriveUI(connected){
 
 function driveTokenClient(){
   // Replace this with your OAuth Web Client ID (Google Cloud Console).
-  const CLIENT_ID = "PASTE_YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com";
+  const CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
 
   // Drive app data scope
   const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
