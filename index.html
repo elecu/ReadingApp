@@ -3,278 +3,389 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Book Quest</title>
+  <title>BookQuest</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css" />
   <meta name="theme-color" content="#111111" />
-  <meta name="description" content="Sprints + hyperfocus, multiple books, achievements, charts, and Story PNG export." />
+  <meta name="description" content="A minimal reading tracker with sprints, achievements, charts, and story export." />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-  <header class="wrap">
-    <h1>Book Quest</h1>
-    <p class="muted">Sprints to get started. Hyperfocus allowed. Multiple books. Achievements + charts + Story PNG export.</p>
+  <header class="wrap header">
+    <h1 class="title">BookQuest</h1>
+    <nav class="tabs" aria-label="Sections">
+      <button class="tab active" data-tab="dash">Dashboard</button>
+      <button class="tab" data-tab="books">Books</button>
+      <button class="tab" data-tab="session">Session</button>
+      <button class="tab" data-tab="stats">Stats</button>
+      <button class="tab" data-tab="ach">Achievements</button>
+      <button class="tab" data-tab="sync">Sync</button>
+      <button class="tab" data-tab="hist">History</button>
+    </nav>
   </header>
 
-  <main class="wrap grid">
+  <main class="wrap">
 
-    <section class="card">
-      <h2>Dashboard</h2>
+    <!-- DASHBOARD -->
+    <section class="panel active" id="panel-dash" data-panel="dash">
+      <div class="grid">
+        <section class="card">
+          <h2>Dashboard</h2>
 
-      <div class="row two">
-        <div>
-          <label>Stats range (applies to book + overall)</label>
-          <select id="rangeSelect">
-            <option value="7">7 days</option>
-            <option value="30" selected>30 days</option>
-            <option value="90">3 months</option>
-            <option value="180">6 months</option>
-            <option value="365">1 year</option>
-          </select>
-        </div>
-        <div>
-          <label>Story export scope</label>
-          <select id="storyScope">
-            <option value="book">Active book</option>
-            <option value="overall">Overall</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="stats">
-        <div class="stat"><div class="statLabel">Level</div><div class="statVal" id="level">—</div></div>
-        <div class="stat"><div class="statLabel">XP</div><div class="statVal" id="xp">—</div></div>
-        <div class="stat"><div class="statLabel">Streak</div><div class="statVal" id="streak">—</div></div>
-        <div class="stat"><div class="statLabel">Daily quest</div><div class="statVal" id="dailyQuest">—</div></div>
-      </div>
-
-      <div class="row">
-        <button id="makeStory" class="btn primary">Generate Story PNG</button>
-        <button id="downloadStory" class="btn" disabled>Download Story PNG</button>
-      </div>
-      <p class="muted small" id="storyHint">Generates a 1080×1920 PNG you can post to Instagram Stories.</p>
-      <canvas id="storyCanvas" width="1080" height="1920" style="display:none;"></canvas>
-    </section>
-
-    <section class="card">
-      <h2>Books</h2>
-
-      <div class="row two">
-        <div>
-          <label>Active book</label>
-          <select id="bookSelect"></select>
-        </div>
-        <div>
-          <label>Quick actions</label>
-          <div class="row" style="margin:0">
-            <button id="markFinished" class="btn ghost">Mark finished</button>
+          <div class="row two">
+            <div>
+              <label>Stats range</label>
+              <select id="rangeSelect">
+                <option value="7">7 days</option>
+                <option value="30" selected>30 days</option>
+                <option value="90">3 months</option>
+                <option value="180">6 months</option>
+                <option value="365">1 year</option>
+              </select>
+            </div>
+            <div>
+              <label>Story export scope</label>
+              <select id="storyScope">
+                <option value="book">Active book</option>
+                <option value="overall">Overall</option>
+              </select>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <details>
-        <summary>Add a book</summary>
-        <div class="row">
-          <div style="flex:1; min-width:180px;">
-            <label>Title</label>
-            <input id="newTitle" placeholder="e.g. Canto 2 (edition X)" />
+          <div class="stats">
+            <div class="stat"><div class="statLabel">Level</div><div class="statVal" id="level">—</div></div>
+            <div class="stat"><div class="statLabel">XP</div><div class="statVal" id="xp">—</div></div>
+            <div class="stat"><div class="statLabel">Streak</div><div class="statVal" id="streak">—</div></div>
+            <div class="stat"><div class="statLabel">Daily quest</div><div class="statVal" id="dailyQuest">—</div></div>
           </div>
-        </div>
-        <div class="row two">
-          <div>
-            <label>Total pages to read (exclude blank pages)</label>
-            <input id="newTotal" type="number" min="1" placeholder="e.g. 320" />
+
+          <div class="row">
+            <button id="makeStory" class="btn primary">Generate Story PNG</button>
+            <button id="downloadStory" class="btn" disabled>Download Story PNG</button>
           </div>
-          <div>
-            <label>Current page (exclude blank pages)</label>
-            <input id="newCurrent" type="number" min="0" placeholder="e.g. 0" />
+          <p class="muted small" id="storyHint">—</p>
+          <canvas id="storyCanvas" width="1080" height="1920" style="display:none;"></canvas>
+        </section>
+
+        <section class="card">
+          <h2>Quick stats</h2>
+          <div class="row two">
+            <div class="stat">
+              <div class="statLabel">Active book</div>
+              <div class="statVal" id="dashActiveBook">—</div>
+              <div class="muted small" id="dashActiveBookMeta">—</div>
+            </div>
+            <div class="stat">
+              <div class="statLabel">ETA</div>
+              <div class="statVal" id="dashEta">—</div>
+              <div class="muted small" id="dashPace">—</div>
+            </div>
           </div>
-        </div>
-        <div class="row">
-          <button id="addBook" class="btn">Add</button>
-        </div>
-      </details>
-
-      <details>
-        <summary>Edit active book</summary>
-        <div class="row">
-          <div style="flex:1; min-width:180px;">
-            <label>Title</label>
-            <input id="editTitle" />
+          <div class="row">
+            <button class="btn ghost" id="jumpSession">Go to Session</button>
+            <button class="btn ghost" id="jumpBooks">Go to Books</button>
           </div>
-        </div>
-        <div class="row two">
-          <div>
-            <label>Total pages (exclude blank pages)</label>
-            <input id="editTotal" type="number" min="1" />
-          </div>
-          <div>
-            <label>Current page (exclude blank pages)</label>
-            <input id="editCurrent" type="number" min="0" />
-          </div>
-        </div>
-        <div class="row">
-          <button id="saveBook" class="btn primary">Save</button>
-          <button id="deleteBook" class="btn ghost">Delete book</button>
-        </div>
-      </details>
-    </section>
-
-    <section class="card">
-      <h2>Session</h2>
-
-      <div class="row two">
-        <div>
-          <label>Mode</label>
-          <select id="mode">
-            <option value="sprint">Sprint</option>
-            <option value="flow">Flow</option>
-          </select>
-        </div>
-        <div>
-          <label>Sprint (minutes)</label>
-          <input id="sprintMins" type="number" min="1" value="8" />
-        </div>
-      </div>
-
-      <div class="row">
-        <button id="start" class="btn primary">Start</button>
-        <button id="pause" class="btn" disabled>Pause</button>
-        <button id="finish" class="btn" disabled>End session</button>
-        <button id="hyper" class="btn ghost" disabled>Keep going (hyperfocus)</button>
-      </div>
-
-      <div class="timer">
-        <div class="timerBig" id="timerBig">00:00</div>
-        <div class="muted small" id="timerHint">Starting is the win.</div>
-      </div>
-
-      <div class="row">
-        <div style="flex:1; min-width:180px;">
-          <label>Pages read this session (exclude blank pages)</label>
-          <input id="pagesRead" type="number" min="0" placeholder="e.g. 6" />
-        </div>
-      </div>
-
-      <p class="muted small">
-        If you get into it and keep reading, brilliant — the sprint only pings; it does not stop you.
-      </p>
-    </section>
-
-    <section class="card">
-      <h2>Active book stats</h2>
-      <div class="stats">
-        <div class="stat"><div class="statLabel">Progress</div><div class="statVal" id="progress">—</div></div>
-        <div class="stat"><div class="statLabel">Pace (average)</div><div class="statVal" id="pace">—</div></div>
-        <div class="stat"><div class="statLabel">ETA</div><div class="statVal" id="eta">—</div></div>
-        <div class="stat"><div class="statLabel">Sessions (in range)</div><div class="statVal" id="sessionsN">—</div></div>
-      </div>
-
-      <div class="charts">
-        <div class="chartBox">
-          <div class="row" style="margin:0 0 6px 0; align-items:center;">
-            <div class="muted small" style="flex:1;">Pages per day</div>
-            <button id="dlBookPages" class="btn ghost smallBtn">Download PNG</button>
-          </div>
-          <canvas id="chartPages" width="700" height="260"></canvas>
-        </div>
-        <div class="chartBox">
-          <div class="row" style="margin:0 0 6px 0; align-items:center;">
-            <div class="muted small" style="flex:1;">Minutes per day</div>
-            <button id="dlBookMins" class="btn ghost smallBtn">Download PNG</button>
-          </div>
-          <canvas id="chartMins" width="700" height="260"></canvas>
-        </div>
+        </section>
       </div>
     </section>
 
-    <section class="card">
-      <h2>Overall stats</h2>
-      <div class="stats">
-        <div class="stat"><div class="statLabel">Books</div><div class="statVal" id="booksCount">—</div></div>
-        <div class="stat"><div class="statLabel">Finished</div><div class="statVal" id="booksDone">—</div></div>
-        <div class="stat"><div class="statLabel">Pages (in range)</div><div class="statVal" id="pagesRange">—</div></div>
-        <div class="stat"><div class="statLabel">Minutes (in range)</div><div class="statVal" id="minsRange">—</div></div>
-      </div>
+    <!-- BOOKS -->
+    <section class="panel" id="panel-books" data-panel="books">
+      <div class="grid">
+        <section class="card">
+          <h2>Books</h2>
 
-      <div class="charts">
-        <div class="chartBox">
-          <div class="row" style="margin:0 0 6px 0; align-items:center;">
-            <div class="muted small" style="flex:1;">Overall pages per day</div>
-            <button id="dlAllPages" class="btn ghost smallBtn">Download PNG</button>
+          <div class="row two">
+            <div>
+              <label>Active book</label>
+              <select id="bookSelect"></select>
+            </div>
+            <div>
+              <label>Quick actions</label>
+              <div class="row" style="margin:0">
+                <button id="markFinished" class="btn ghost">Mark finished</button>
+              </div>
+            </div>
           </div>
-          <canvas id="chartAllPages" width="700" height="260"></canvas>
-        </div>
-        <div class="chartBox">
-          <div class="row" style="margin:0 0 6px 0; align-items:center;">
-            <div class="muted small" style="flex:1;">Overall minutes per day</div>
-            <button id="dlAllMins" class="btn ghost smallBtn">Download PNG</button>
+
+          <div class="row">
+            <div class="coverWrap">
+              <div class="coverBox">
+                <img id="activeCover" alt="Book cover" />
+                <div class="muted small" id="coverEmpty">No cover</div>
+              </div>
+            </div>
+            <div style="flex:1; min-width:220px;">
+              <div class="muted small">Cover is stored on your device (and in Drive if you sync).</div>
+            </div>
           </div>
-          <canvas id="chartAllMins" width="700" height="260"></canvas>
-        </div>
+
+          <details>
+            <summary>Add a book</summary>
+
+            <div class="row">
+              <div style="flex:1; min-width:180px;">
+                <label>Title</label>
+                <input id="newTitle" placeholder="e.g. Canto 2 (edition X)" />
+              </div>
+            </div>
+
+            <div class="row two">
+              <div>
+                <label>Total pages to read (exclude blank pages)</label>
+                <input id="newTotal" type="number" min="1" placeholder="e.g. 320" />
+              </div>
+              <div>
+                <label>Current page (exclude blank pages)</label>
+                <input id="newCurrent" type="number" min="0" placeholder="e.g. 0" />
+              </div>
+            </div>
+
+            <div class="row">
+              <label class="btn ghost file">
+                Upload cover (PNG/JPG)
+                <input id="newCover" type="file" accept="image/png,image/jpeg,image/jpg" />
+              </label>
+              <button id="addBook" class="btn primary">Add</button>
+            </div>
+
+            <p class="muted small">Tip: cover is resized automatically to keep the file small.</p>
+          </details>
+
+          <details>
+            <summary>Edit active book</summary>
+
+            <div class="row">
+              <div style="flex:1; min-width:180px;">
+                <label>Title</label>
+                <input id="editTitle" />
+              </div>
+            </div>
+
+            <div class="row two">
+              <div>
+                <label>Total pages (exclude blank pages)</label>
+                <input id="editTotal" type="number" min="1" />
+              </div>
+              <div>
+                <label>Current page (exclude blank pages)</label>
+                <input id="editCurrent" type="number" min="0" />
+              </div>
+            </div>
+
+            <div class="row">
+              <label class="btn ghost file">
+                Change cover
+                <input id="editCover" type="file" accept="image/png,image/jpeg,image/jpg" />
+              </label>
+              <button id="removeCover" class="btn ghost">Remove cover</button>
+            </div>
+
+            <div class="row">
+              <button id="saveBook" class="btn primary">Save</button>
+              <button id="deleteBook" class="btn ghost">Delete book</button>
+            </div>
+          </details>
+        </section>
       </div>
     </section>
 
-    <section class="card">
-      <h2>Achievements</h2>
-      <div class="row two">
-        <div class="stat" style="width:100%;">
-          <div class="statLabel">Unlocked</div>
-          <div class="statVal" id="achUnlocked">—</div>
-          <div class="muted small" id="achUnlockedList">—</div>
-        </div>
-        <div class="stat" style="width:100%;">
-          <div class="statLabel">Next up</div>
-          <div class="statVal" id="achNext">—</div>
-          <div class="muted small" id="achNextList">—</div>
-        </div>
+    <!-- SESSION -->
+    <section class="panel" id="panel-session" data-panel="session">
+      <div class="grid">
+        <section class="card">
+          <h2>Session</h2>
+
+          <div class="row two">
+            <div>
+              <label>Mode</label>
+              <select id="mode">
+                <option value="sprint">Sprint</option>
+                <option value="flow">Flow</option>
+              </select>
+            </div>
+            <div>
+              <label>Sprint (minutes)</label>
+              <input id="sprintMins" type="number" min="1" value="8" />
+            </div>
+          </div>
+
+          <div class="row">
+            <button id="start" class="btn primary">Start</button>
+            <button id="pause" class="btn" disabled>Pause</button>
+            <button id="finish" class="btn" disabled>End session</button>
+            <button id="hyper" class="btn ghost" disabled>Keep going</button>
+          </div>
+
+          <div class="timer">
+            <div class="timerBig" id="timerBig">00:00</div>
+            <div class="muted small" id="timerHint">—</div>
+          </div>
+
+          <div class="row">
+            <div style="flex:1; min-width:180px;">
+              <label>Pages read this session (exclude blank pages)</label>
+              <input id="pagesRead" type="number" min="0" placeholder="e.g. 6" />
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Active book</h2>
+          <div class="row">
+            <div class="coverTiny">
+              <img id="activeCover2" alt="Book cover" />
+            </div>
+            <div style="flex:1; min-width:180px;">
+              <div class="statVal" id="activeTitle">—</div>
+              <div class="muted small" id="activeProgressLine">—</div>
+            </div>
+          </div>
+        </section>
       </div>
-      <p class="muted small">Achievements are lifetime. Quests reset daily/weekly.</p>
     </section>
 
-    <section class="card">
-      <h2>Sync</h2>
+    <!-- STATS -->
+    <section class="panel" id="panel-stats" data-panel="stats">
+      <div class="grid">
+        <section class="card">
+          <h2>Active book stats</h2>
+          <div class="stats">
+            <div class="stat"><div class="statLabel">Progress</div><div class="statVal" id="progress">—</div></div>
+            <div class="stat"><div class="statLabel">Pace (average)</div><div class="statVal" id="pace">—</div></div>
+            <div class="stat"><div class="statLabel">ETA</div><div class="statVal" id="eta">—</div></div>
+            <div class="stat"><div class="statLabel">Sessions (in range)</div><div class="statVal" id="sessionsN">—</div></div>
+          </div>
 
-      <details open>
-        <summary>Manual (recommended as a backup)</summary>
-        <div class="row">
-          <button id="exportBtn" class="btn">Export JSON</button>
-          <label class="btn ghost file">
-            Import JSON
-            <input id="importFile" type="file" accept="application/json" />
-          </label>
-        </div>
-        <p class="muted small">
-          Tip: use this to move your progress between devices without any sign-in.
-        </p>
-      </details>
+          <div class="charts">
+            <div class="chartBox">
+              <div class="row" style="margin:0 0 6px 0; align-items:center;">
+                <div class="muted small" style="flex:1;">Pages per day</div>
+                <button id="dlBookPages" class="btn ghost smallBtn">Download PNG</button>
+              </div>
+              <canvas id="chartPages" width="700" height="260"></canvas>
+            </div>
+            <div class="chartBox">
+              <div class="row" style="margin:0 0 6px 0; align-items:center;">
+                <div class="muted small" style="flex:1;">Minutes per day</div>
+                <button id="dlBookMins" class="btn ghost smallBtn">Download PNG</button>
+              </div>
+              <canvas id="chartMins" width="700" height="260"></canvas>
+            </div>
+          </div>
+        </section>
 
-      <details>
-        <summary>Google Drive (automatic)</summary>
-        <p class="muted small">
-          Stores your progress as a JSON file in your Drive app data folder (hidden). If your e-reader browser is limited,
-          manual sync will be more reliable.
-        </p>
-        <div class="row">
-          <button id="driveSignIn" class="btn">Sign in with Google</button>
-          <button id="drivePull" class="btn ghost" disabled>Pull from Drive</button>
-          <button id="drivePush" class="btn primary" disabled>Save to Drive</button>
-        </div>
-        <div class="muted small" id="driveStatus">Not connected.</div>
-      </details>
+        <section class="card">
+          <h2>Overall stats</h2>
+          <div class="stats">
+            <div class="stat"><div class="statLabel">Books</div><div class="statVal" id="booksCount">—</div></div>
+            <div class="stat"><div class="statLabel">Finished</div><div class="statVal" id="booksDone">—</div></div>
+            <div class="stat"><div class="statLabel">Pages (in range)</div><div class="statVal" id="pagesRange">—</div></div>
+            <div class="stat"><div class="statLabel">Minutes (in range)</div><div class="statVal" id="minsRange">—</div></div>
+          </div>
+
+          <div class="charts">
+            <div class="chartBox">
+              <div class="row" style="margin:0 0 6px 0; align-items:center;">
+                <div class="muted small" style="flex:1;">Overall pages per day</div>
+                <button id="dlAllPages" class="btn ghost smallBtn">Download PNG</button>
+              </div>
+              <canvas id="chartAllPages" width="700" height="260"></canvas>
+            </div>
+            <div class="chartBox">
+              <div class="row" style="margin:0 0 6px 0; align-items:center;">
+                <div class="muted small" style="flex:1;">Overall minutes per day</div>
+                <button id="dlAllMins" class="btn ghost smallBtn">Download PNG</button>
+              </div>
+              <canvas id="chartAllMins" width="700" height="260"></canvas>
+            </div>
+          </div>
+        </section>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>History (latest 25)</h2>
-      <div id="history" class="history"></div>
+    <!-- ACHIEVEMENTS -->
+    <section class="panel" id="panel-ach" data-panel="ach">
+      <div class="grid">
+        <section class="card">
+          <h2>Achievements</h2>
+          <div class="row two">
+            <div class="stat" style="width:100%;">
+              <div class="statLabel">Unlocked</div>
+              <div class="statVal" id="achUnlocked">—</div>
+              <div class="muted small pre" id="achUnlockedList">—</div>
+            </div>
+            <div class="stat" style="width:100%;">
+              <div class="statLabel">Next up</div>
+              <div class="statVal" id="achNext">—</div>
+              <div class="muted small pre" id="achNextList">—</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- SYNC -->
+    <section class="panel" id="panel-sync" data-panel="sync">
+      <div class="grid">
+        <section class="card">
+          <h2>Sync</h2>
+
+          <details open>
+            <summary>Manual (backup)</summary>
+            <div class="row">
+              <button id="exportBtn" class="btn">Export JSON</button>
+              <label class="btn ghost file">
+                Import JSON
+                <input id="importFile" type="file" accept="application/json" />
+              </label>
+            </div>
+            <p class="muted small">Use this to move your progress between devices without signing in.</p>
+          </details>
+
+          <details>
+            <summary>Google Drive</summary>
+            <p class="muted small">Stores progress as a JSON file in your Drive app data folder (hidden).</p>
+
+            <div class="row">
+              <button id="driveSignIn" class="btn">Sign in with Google</button>
+              <button id="drivePull" class="btn ghost" disabled>Pull from Drive</button>
+              <button id="drivePush" class="btn primary" disabled>Save to Drive</button>
+            </div>
+
+            <div class="row two" style="margin-top:8px;">
+              <div>
+                <label>Auto-save to Drive</label>
+                <select id="autoDrive">
+                  <option value="off">Off</option>
+                  <option value="5" selected>Every 5 minutes</option>
+                  <option value="10">Every 10 minutes</option>
+                  <option value="20">Every 20 minutes</option>
+                </select>
+              </div>
+              <div>
+                <label>Status</label>
+                <div class="muted small" id="driveStatus">Not connected.</div>
+              </div>
+            </div>
+
+            <p class="muted small">Auto-save only runs after you sign in and grant permission.</p>
+          </details>
+        </section>
+      </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section class="panel" id="panel-hist" data-panel="hist">
+      <div class="grid">
+        <section class="card">
+          <h2>History (latest 50)</h2>
+          <div id="history" class="history"></div>
+        </section>
+      </div>
     </section>
 
   </main>
-
-  <footer class="wrap muted small">
-    <button id="resetAll" class="btn ghost">Full reset</button>
-    <span id="installHint" style="margin-left:10px;"></span>
-  </footer>
 
   <script src="app.js"></script>
 </body>
