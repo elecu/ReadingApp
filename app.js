@@ -1,9 +1,9 @@
 const $ = (id) => document.getElementById(id);
 
 // Config
-const STORAGE_KEY = "bookquest_state_v3"; // Bumped version for new fields
+const STORAGE_KEY = "bookquest_state_v3";
 const DRIVE_FILENAME = "bookquest_state.json";
-const BUILD_VERSION = "Build v0.6.0-beta"; 
+const BUILD_VERSION = "Build v0.7.1-beta"; 
 const GOOGLE_CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
 
 // I18N Dictionary
@@ -27,7 +27,7 @@ const TRANSLATIONS = {
     modal_crop_title: "Crop & Scan", btn_scan: "Extract Text", btn_cancel: "Cancel",
     hint_paused: "Paused", hint_sprint_done: "Sprint complete ✅", hint_flow: "Flow mode.", hint_start: "Ready?",
     alert_pages_req: "Please enter total pages.", alert_imported: "Imported ✅", alert_ocr_error: "Could not read text.",
-    status_scanning: "Scanning text...", status_connected: "Connected ✅"
+    status_scanning: "Scanning text...", status_connected: "Connected ✅", status_autopull: "Auto-syncing...", status_saved: "Saved to Drive ✅", status_loaded: "Loaded from Drive ✅"
   },
   es: {
     nav_dashboard: "Tablero", nav_books: "Libros", nav_session: "Sesión", nav_stats: "Estadísticas", nav_achievements: "Logros", nav_quotes: "Citas", nav_settings: "Ajustes", nav_history: "Historial",
@@ -48,7 +48,7 @@ const TRANSLATIONS = {
     modal_crop_title: "Recortar y Escanear", btn_scan: "Extraer Texto", btn_cancel: "Cancelar",
     hint_paused: "En pausa", hint_sprint_done: "Sprint completo ✅", hint_flow: "Modo Flow.", hint_start: "¿Listo?",
     alert_pages_req: "Por favor pon el total de páginas.", alert_imported: "Importado ✅", alert_ocr_error: "No se pudo leer el texto.",
-    status_scanning: "Escaneando texto...", status_connected: "Conectado ✅"
+    status_scanning: "Escaneando texto...", status_connected: "Conectado ✅", status_autopull: "Sincronizando...", status_saved: "Guardado en Drive ✅", status_loaded: "Cargado de Drive ✅"
   }
 };
 
@@ -63,6 +63,9 @@ const state = {
   drive: { token:null, fileId:null, lastSyncISO:null },
   quotes: [] 
 };
+
+// Autosave Timer ID
+let autoSaveInterval = null;
 
 function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
 function t(key){ return TRANSLATIONS[currentLang][key] || key; }
@@ -83,6 +86,11 @@ function updateLanguageUI(){
     const key = el.getAttribute("data-i18n");
     if(TRANSLATIONS[currentLang][key]) el.textContent = TRANSLATIONS[currentLang][key];
   });
+  // Update Drive Status if connected
+  if(state.drive.token && state.drive.lastSyncISO){
+      const time = new Date(state.drive.lastSyncISO).toLocaleTimeString();
+      $("driveStatus").textContent = `Sync: ${time}`;
+  }
   renderAll();
 }
 
@@ -95,7 +103,6 @@ function ensureDefaultBook(){
   if(Object.keys(state.books).length > 0) return;
   
   const id = uid();
-  // Mark as placeholder so we can delete it later if user adds a real book
   state.books[id] = { id, title:"My First Book", totalPages:300, currentPage:0, createdAt:new Date().toISOString(), isPlaceholder: true };
   state.activeBookId = id;
 }
@@ -255,8 +262,6 @@ function deleteBook(){
 function markUnread(){
   const b = activeBook();
   if(!b) return;
-  // Reset to last page - 1 or something reasonable. User said "mark as no read in case of error".
-  // Assuming they finished it by mistake.
   b.currentPage = Math.max(0, b.totalPages - 1); 
   save(); renderAll();
 }
@@ -272,7 +277,7 @@ function rereadBook(){
 
 // ---------- Quotes & OCR ----------
 let cropper = null;
-let lastSelectedQuote = null; // for generating image
+let lastSelectedQuote = null; 
 
 function setupOCR(){
   $("quoteImage").addEventListener("change", (e)=>{
@@ -319,7 +324,7 @@ function setupOCR(){
     if(!text) return;
     state.quotes.push({
       id: uid(),
-      bookId: $("quoteBookSelect").value || state.activeBookId, // use selected or active
+      bookId: $("quoteBookSelect").value || state.activeBookId,
       text,
       author: $("quoteAuthor").value,
       bookTitle: $("quoteBookTitle").value,
@@ -334,12 +339,9 @@ function setupOCR(){
 }
 
 function renderQuotes(){
-  // Group by Book
   const container = $("quotesListContainer");
   container.innerHTML = "";
   
-  // Get unique book IDs from quotes or active books?
-  // Let's iterate all books that have quotes + misc quotes
   const quotesByBook = {};
   state.quotes.forEach(q => {
     const key = q.bookTitle || "Unknown Book";
@@ -366,7 +368,6 @@ function renderQuotes(){
       d.querySelector("button").onclick = () => {
          lastSelectedQuote = q;
          $("quoteGenActions").style.display = "flex";
-         // highlight
          document.querySelectorAll(".item div").forEach(x=>x.style.background="transparent");
          d.style.background = "rgba(255,255,255,0.05)";
       };
@@ -382,20 +383,16 @@ function generateQuoteImage(format){
   const cvs = $("quoteGenCanvas");
   const ctx = cvs.getContext("2d");
   
-  // Sizes
   const W = 1080;
   const H = format === "story" ? 1920 : 1080;
   cvs.width = W; cvs.height = H;
   
-  // Bg
   ctx.fillStyle = "#121212";
   ctx.fillRect(0,0,W,H);
   
-  // Text
   ctx.fillStyle = "#ffffff";
   ctx.textAlign = "center";
   
-  // Wrap text logic
   const fontSize = format === "story" ? 60 : 50;
   ctx.font = "italic " + fontSize + "px serif";
   
@@ -405,19 +402,16 @@ function generateQuoteImage(format){
   
   wrapText(ctx, `"${q.text}"`, textX, textY, maxW, fontSize*1.3);
   
-  // Footer
   ctx.font = "30px sans-serif";
   ctx.fillStyle = "#aaaaaa";
   ctx.fillText(q.author || "", W/2, H/2 + 200);
   ctx.font = "bold 30px sans-serif";
   ctx.fillText(q.bookTitle || "", W/2, H/2 + 240);
   
-  // Branding
   ctx.font = "20px monospace";
   ctx.fillStyle = "#555";
   ctx.fillText("BookQuest App", W/2, H - 50);
 
-  // Trigger Download
   const link = document.createElement('a');
   link.download = `quote_${format}.png`;
   link.href = cvs.toDataURL();
@@ -440,8 +434,6 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
     }
   }
   lines.push(line);
-  
-  // Draw centered
   let startY = y - ((lines.length-1) * lineHeight)/2;
   for(let i=0; i<lines.length; i++){
     ctx.fillText(lines[i], x, startY + (i*lineHeight));
@@ -450,7 +442,6 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 
 // ---------- Render Logic ----------
 function renderAll(){
-  // Populate Book Selects (Active & Quote)
   const sel = $("bookSelect");
   const qSel = $("quoteBookSelect");
   const ids = Object.keys(state.books);
@@ -461,7 +452,6 @@ function renderAll(){
   
   if(state.activeBookId) sel.value = state.activeBookId;
 
-  // Active Book Data
   const b = activeBook();
   if(b){
     $("editTitle").value = b.title || "";
@@ -469,7 +459,6 @@ function renderAll(){
     $("editCurrent").value = b.currentPage || 0;
     $("timesReadVal").textContent = b.timesRead || 0;
     
-    // Check finished
     const isFinished = b.totalPages && b.currentPage >= b.totalPages;
     $("markUnread").style.display = isFinished ? "inline-block" : "none";
     $("rereadBook").style.display = isFinished ? "inline-block" : "none";
@@ -477,14 +466,12 @@ function renderAll(){
     const pct = b.totalPages ? Math.round((b.currentPage/b.totalPages)*100) : 0;
     $("progress").textContent = `${b.currentPage}/${b.totalPages} (${pct}%)`;
     
-    // Pace
     const sessions = state.sessions.filter(s=>s.bookId === b.id);
     let p=0, m=0;
     sessions.slice(-10).forEach(s=>{ p+=s.pages||0; m+=s.mins||0; });
     const pace = m? p/m : 0;
     $("pace").textContent = pace.toFixed(2) + " p/min";
     
-    // ETA
     if(isFinished) $("eta").textContent = "Done";
     else if(pace>0) $("eta").textContent = ((b.totalPages-b.currentPage)/pace/60).toFixed(1) + "h";
     else $("eta").textContent = "—";
@@ -492,7 +479,6 @@ function renderAll(){
 
   renderQuotes();
   
-  // History & Version
   const hist = [...state.sessions].slice(-25).reverse();
   $("history").innerHTML = hist.map(s=>{
      return `<div class="item"><b>${(s.endISO||"").slice(0,10)}</b> <span class="muted">${s.mins}m</span></div>`;
@@ -501,7 +487,7 @@ function renderAll(){
   $("buildVersion").textContent = BUILD_VERSION;
 }
 
-// ---------- Drive Sync ----------
+// ---------- Drive Sync (Restored & Enhanced) ----------
 function driveTokenClient(){
   const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
   if(!window.google) return null;
@@ -511,16 +497,114 @@ function driveTokenClient(){
     callback: (resp) => {
       if(resp.access_token){
         state.drive.token = resp.access_token;
-        $("driveStatus").textContent = t("status_connected");
+        $("driveStatus").textContent = t("status_autopull");
         save();
+        
+        // AUTO PULL on sign in
+        drivePull().then(() => {
+           // Start Auto-Save (Every 1 minute)
+           if(autoSaveInterval) clearInterval(autoSaveInterval);
+           autoSaveInterval = setInterval(drivePush, 60000); 
+           console.log("Auto-save enabled");
+        });
       }
     }
   });
 }
+
 let _tokenClient = null;
 function driveSignIn(){
   if(!_tokenClient) _tokenClient = driveTokenClient();
   if(_tokenClient) _tokenClient.requestAccessToken({prompt: "consent"});
+}
+
+async function driveFindFileId(){
+  const q = encodeURIComponent(`name='${DRIVE_FILENAME}'`);
+  const url = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime)`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${state.drive.token}` } });
+  if(!res.ok) throw new Error("List failed");
+  const data = await res.json();
+  return (data.files && data.files[0]) ? data.files[0].id : null;
+}
+
+async function drivePull(){
+  try{
+    if(!state.drive.token) return;
+    let fileId = state.drive.fileId || await driveFindFileId();
+    if(!fileId){
+      $("driveStatus").textContent = "No backup found in Drive.";
+      return;
+    }
+    const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${state.drive.token}` } });
+    if(!res.ok) throw new Error("DL failed");
+    
+    const data = await res.json();
+    Object.assign(state, data); // merge
+    state.drive.fileId = fileId; 
+    state.drive.lastSyncISO = new Date().toISOString();
+    
+    ensureDefaultBook();
+    save(); 
+    renderAll();
+    
+    const time = new Date().toLocaleTimeString();
+    $("driveStatus").textContent = `${t("status_loaded")} (${time})`;
+  }catch(e){
+    console.error(e);
+    $("driveStatus").textContent = "Error pulling.";
+  }
+}
+
+async function drivePush(){
+  try{
+    if(!state.drive.token) return;
+    let fileId = state.drive.fileId || await driveFindFileId();
+    const body = JSON.stringify(state);
+    
+    if(!fileId){
+      // Create
+      const boundary = "foo_bar_baz";
+      const metadata = { name: DRIVE_FILENAME, parents: ["appDataFolder"] };
+      const multipart = `
+--${boundary}
+Content-Type: application/json; charset=UTF-8
+
+${JSON.stringify(metadata)}
+--${boundary}
+Content-Type: application/json; charset=UTF-8
+
+${body}
+--${boundary}--`;
+
+      const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id`, {
+         method:"POST",
+         headers: { Authorization: `Bearer ${state.drive.token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
+         body: multipart
+      });
+      if(!res.ok) throw new Error("Create failed");
+      const d = await res.json();
+      fileId = d.id;
+      state.drive.fileId = fileId;
+    } else {
+      // Update
+      const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+         method: "PATCH",
+         headers: { Authorization: `Bearer ${state.drive.token}`, "Content-Type": "application/json; charset=UTF-8" },
+         body
+      });
+      if(!res.ok) throw new Error("Update failed");
+    }
+    
+    state.drive.lastSyncISO = new Date().toISOString();
+    save();
+    
+    const time = new Date().toLocaleTimeString();
+    $("driveStatus").textContent = `${t("status_saved")} (${time})`;
+  }catch(e){
+    console.error(e);
+    $("driveStatus").textContent = "Error saving.";
+  }
 }
 
 // ---------- Init ----------
@@ -538,7 +622,6 @@ function bind(){
   $("pause").addEventListener("click", ()=>togglePause(false));
   $("finish").addEventListener("click", finishSession);
   
-  // Tab Switching Logic
   document.querySelectorAll(".tabbtn").forEach(btn => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".tabbtn").forEach(b => b.classList.remove("active"));
@@ -547,14 +630,17 @@ function bind(){
       const target = btn.dataset.tab;
       $( "tab-" + target ).classList.add("active");
       
-      // Auto-pause if going to quotes
       if(target === "quotes" && state.timer.running){
-        togglePause(true); // force pause
+        togglePause(true); 
       }
     });
   });
 
   $("driveSignIn").addEventListener("click", driveSignIn);
+  // Re-attached manual listeners
+  $("drivePull").addEventListener("click", drivePull);
+  $("drivePush").addEventListener("click", drivePush);
+  
   setupOCR();
 }
 
