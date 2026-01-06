@@ -1,43 +1,48 @@
 const $ = (id) => document.getElementById(id);
 
 // Config
-const STORAGE_KEY = "bookquest_state_v6";
+const STORAGE_KEY = "bookquest_state_v8"; // Version bumped to reset/clean state if needed
 const DRIVE_FILENAME = "bookquest_state.json";
-const BUILD_VERSION = "Build v1.2.0-share-fix"; 
+const BUILD_VERSION = "Build v1.4.0-lang-fix"; 
 const GOOGLE_CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
 
 // I18N Dictionary
 const TRANSLATIONS = {
   en: {
-    // ... (mismos textos base) ...
-    nav_dashboard: "Dashboard", nav_books: "Books", nav_session: "Session", nav_stats: "Stats", nav_achievements: "Achievements", nav_quotes: "Quotes", nav_settings: "Settings", nav_history: "History",
-    dash_title: "Dashboard", lbl_stats_range: "Stats range",
+    nav_dashboard: "Dashboard", nav_books: "Books", nav_session: "Session", nav_achievements: "Achievements", nav_quotes: "Quotes", nav_settings: "Settings",
+    dash_title: "Dashboard", lbl_stats_range: "Range",
     opt_7days: "7 days", opt_30days: "30 days", opt_1year: "1 year", opt_alltime: "All time",
     btn_gen_story: "Share / Create Image", 
     title_active_book: "Active book", btn_mark_finish: "Mark finished",
     sum_edit_book: "Edit active book", btn_save: "Save Changes", btn_delete: "Delete book", 
-    lbl_change_cover: "Change Cover", lbl_times_read: "Times Read", lbl_rating: "Rating (0-5)",
+    lbl_change_cover: "Change Cover", lbl_times_read: "Times Read", lbl_rating: "Rating (0-5)", lbl_author: "Author",
     lbl_mode: "Mode", btn_start: "Start", btn_pause: "Pause", btn_hyper: "Keep going",
     title_locked: "Next Up (Locked)", title_unlocked: "Unlocked",
-    status_autopull: "Syncing...", status_saved: "Saved to Drive ✅", status_loaded: "Loaded ✅", status_token_exp: "Re-connecting...",
-    share_opt_progress: "Current Progress", share_opt_finish: "Book Finished", share_opt_stats: "Yearly Stats"
+    status_autopull: "Syncing...", status_saved: "Saved ✅", status_loaded: "Loaded ✅", status_token_exp: "Refresh...",
+    share_opt_progress: "Current Progress", share_opt_finish: "Book Finished", 
+    share_opt_year: "Yearly Report", share_opt_semester: "6-Month Report", share_opt_quarter: "3-Month Report",
+    lbl_pages_read: "Pages Read", lbl_time_ded: "Time Dedicated", lbl_books_fin: "Books Finished", lbl_this_period: "This Period", lbl_hours: "HOURS", lbl_pages: "PAGES", lbl_books: "BOOKS",
+    alert_pages_req: "Please enter total pages."
   },
   es: {
-    nav_dashboard: "Tablero", nav_books: "Libros", nav_session: "Sesión", nav_stats: "Estadísticas", nav_achievements: "Logros", nav_quotes: "Citas", nav_settings: "Ajustes", nav_history: "Historial",
-    dash_title: "Tablero", lbl_stats_range: "Rango de estadísticas",
+    nav_dashboard: "Tablero", nav_books: "Libros", nav_session: "Sesión", nav_achievements: "Logros", nav_quotes: "Citas", nav_settings: "Ajustes",
+    dash_title: "Tablero", lbl_stats_range: "Rango",
     opt_7days: "7 días", opt_30days: "30 días", opt_1year: "1 año", opt_alltime: "Todo el tiempo",
     btn_gen_story: "Compartir / Crear Imagen", 
     title_active_book: "Libro activo", btn_mark_finish: "Marcar terminado",
     sum_edit_book: "Editar libro activo", btn_save: "Guardar Cambios", btn_delete: "Borrar libro", 
-    lbl_change_cover: "Cambiar Portada", lbl_times_read: "Veces Leído", lbl_rating: "Calificación (0-5)",
+    lbl_change_cover: "Cambiar Portada", lbl_times_read: "Veces Leído", lbl_rating: "Calificación (0-5)", lbl_author: "Autor",
     lbl_mode: "Modo", btn_start: "Comenzar", btn_pause: "Pausa", btn_hyper: "Seguir (Hyperfocus)",
     title_locked: "Siguientes (Bloqueados)", title_unlocked: "Desbloqueados",
-    status_autopull: "Sincronizando...", status_saved: "Guardado en Drive ✅", status_loaded: "Cargado ✅", status_token_exp: "Reconectando...",
-    share_opt_progress: "Progreso Actual", share_opt_finish: "Libro Terminado", share_opt_stats: "Resumen del Año"
+    status_autopull: "Sincronizando...", status_saved: "Guardado ✅", status_loaded: "Cargado ✅", status_token_exp: "Refrescando...",
+    share_opt_progress: "Progreso Actual", share_opt_finish: "Libro Terminado", 
+    share_opt_year: "Reporte Anual", share_opt_semester: "Reporte Semestral", share_opt_quarter: "Reporte Trimestral",
+    lbl_pages_read: "Páginas Leídas", lbl_time_ded: "Tiempo Dedicado", lbl_books_fin: "Libros Terminados", lbl_this_period: "Este Periodo", lbl_hours: "HORAS", lbl_pages: "PÁGINAS", lbl_books: "LIBROS",
+    alert_pages_req: "Por favor pon el total de páginas."
   }
 };
 
-let currentLang = "es"; // Default to Spanish as requested via prompt context if user prefers
+let currentLang = "en"; // Default is now English
 
 // ---------- State ----------
 const state = {
@@ -85,7 +90,8 @@ function setLanguage(lang){ currentLang = lang; updateLanguageUI(); }
 function ensureDefaultBook(){
   if(Object.keys(state.books).length > 0) return;
   const id = uid();
-  state.books[id] = { id, title:"Mi Primer Libro", totalPages:300, currentPage:0, createdAt:new Date().toISOString(), isPlaceholder: true };
+  // Default title in English now
+  state.books[id] = { id, title:"My First Book", totalPages:300, currentPage:0, createdAt:new Date().toISOString(), isPlaceholder: true };
   state.activeBookId = id;
 }
 
@@ -130,14 +136,14 @@ function startTimer(){
       if(remaining <= 0 && !state.timer.bell){
         state.timer.bell = true;
         beep();
-        $("timerHint").textContent = "Sprint Fin ✅";
+        $("timerHint").textContent = t("hint_sprint_done") || "Sprint Done ✅";
         $("hyper").disabled = false;
       }
       if(!state.timer.bell) $("timerBig").textContent = formatMMSS(remaining);
       else $("timerBig").textContent = "+" + formatMMSS(-remaining);
     }else{
       $("timerBig").textContent = formatMMSS(state.timer.elapsedMs);
-      $("timerHint").textContent = "Modo Flow 🔥";
+      $("timerHint").textContent = "Flow 🔥";
     }
   };
   tick();
@@ -151,7 +157,7 @@ function hyperfocus(){
   state.timer.bell = true; 
   $("mode").value = "open"; 
   $("hyper").disabled = true;
-  $("timerHint").textContent = "Hyperfocus Activado 🔥";
+  $("timerHint").textContent = "Hyperfocus 🔥";
   save();
 }
 
@@ -168,14 +174,14 @@ function togglePause(forcePause = false){
      if(!state.timer.paused){
        state.timer.paused = true;
        $("pause").textContent = "Resume";
-       $("timerHint").textContent = "En Pausa";
+       $("timerHint").textContent = "Paused";
      }
      save(); return;
   }
   state.timer.paused = !state.timer.paused;
   if(state.timer.paused){
     $("pause").textContent = "Resume";
-    $("timerHint").textContent = "En Pausa";
+    $("timerHint").textContent = "Paused";
   }else{
     state.timer.startMs = Date.now() - state.timer.elapsedMs;
     $("pause").textContent = t("btn_pause");
@@ -207,94 +213,38 @@ function finishSession(){
   save(); renderAll();
 }
 
-// ---------- Charts (Stats) ----------
-function aggregateDaily(bookId, days){
-  const map = new Map();
-  const now = new Date();
-  // Init map with zeros for all days
-  for(let i=days-1;i>=0;i--){
-      const dt = new Date(now.getTime() - i*24*3600*1000);
-      map.set(dt.toISOString().slice(0,10), {pages:0, mins:0});
-  }
-  
-  for(const s of state.sessions){
-    if(bookId && s.bookId !== bookId) continue;
-    if(!inRange(s.endISO || s.startISO, days)) continue;
-    const day = (s.endISO || s.startISO).slice(0,10);
-    if(map.has(day)){
-        const cur = map.get(day);
-        cur.pages += (s.pages||0);
-        cur.mins += (s.mins||0);
-    }
-  }
-  
-  const labels = [], pagesArr = [], minsArr = [];
-  map.forEach((val, key) => {
-      labels.push(key.slice(5)); // MM-DD
-      pagesArr.push(val.pages);
-      minsArr.push(val.mins);
-  });
-  return {labels, pagesArr, minsArr};
-}
-
-function drawBarChart(canvas, labels, values){
-  const ctx = canvas.getContext("2d");
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle = "#0c0c0d"; ctx.fillRect(0,0,W,H); 
-
-  const maxV = Math.max(1, ...values);
-  const padL = 40, padT = 20, plotH = H - 50, plotW = W - 50;
-  
-  // Bars
-  const n = values.length;
-  const barW = Math.max(2, Math.floor(plotW / n) - 2);
-  
-  for(let i=0;i<n;i++){
-    const h = Math.round((values[i] / maxV) * plotH);
-    const x = padL + i*(barW+2);
-    const y = padT + (plotH - h);
-    ctx.fillStyle = values[i]>0 ? "#4caf50" : "#222";
-    ctx.fillRect(x, y, barW, h);
-  }
-  
-  // Text
-  ctx.fillStyle = "#888"; ctx.font = "12px sans-serif";
-  ctx.fillText("Max: "+maxV, 5, padT);
-  // Simple axis
-  ctx.strokeStyle="#333"; ctx.beginPath(); ctx.moveTo(padL, padT+plotH); ctx.lineTo(padL+plotW, padT+plotH); ctx.stroke();
-}
-
 // ---------- Achievements ----------
 const ACHIEVEMENTS = [
-  {id:"first", emoji:"🌱", title:"Primer Paso", desc:"Termina 1 sesión", check:()=>state.sessions.length >= 1},
-  {id:"streak3", emoji:"🔥", title:"En Racha", desc:"Racha de 3 días", check:()=>{
+  {id:"first", emoji:"🌱", title:"First Step", desc:"Finish 1 session", check:()=>state.sessions.length >= 1},
+  {id:"streak3", emoji:"🔥", title:"On Fire", desc:"3 day streak", check:()=>{
      const days = [...new Set(state.sessions.map(s=>(s.endISO||"").slice(0,10)))].sort();
      return days.length >= 3; 
   }},
-  {id:"reader", emoji:"🐛", title:"Ratón de Biblioteca", desc:"Lee 100 páginas", check:()=>state.sessions.reduce((a,b)=>a+(b.pages||0),0) >= 100},
-  {id:"finish1", emoji:"🏆", title:"Finalista", desc:"Termina un libro", check:()=>{
+  {id:"reader", emoji:"🐛", title:"Bookworm", desc:"Read 100 pages", check:()=>state.sessions.reduce((a,b)=>a+(b.pages||0),0) >= 100},
+  {id:"finish1", emoji:"🏆", title:"Finisher", desc:"Finish a book", check:()=>{
      return Object.values(state.books).some(b=> b.totalPages && b.currentPage >= b.totalPages);
   }},
-  {id:"expert", emoji:"🎓", title:"Experto", desc:"Lee 1000 páginas", check:()=>state.sessions.reduce((a,b)=>a+(b.pages||0),0) >= 1000}
+  {id:"expert", emoji:"🎓", title:"Expert", desc:"Read 1000 pages", check:()=>state.sessions.reduce((a,b)=>a+(b.pages||0),0) >= 1000}
 ];
 
 function checkAchievements(){
   const unlocked = ACHIEVEMENTS.filter(a => a.check());
   const locked = ACHIEVEMENTS.filter(a => !a.check());
   
+  // Render Unlocked
   $("achUnlockedList").innerHTML = unlocked.map(a => `
        <div class="item" style="border-left: 3px solid #4caf50;">
           <div style="font-size:24px; float:left; margin-right:10px">${a.emoji}</div>
           <div class="itemTitle">${a.title}</div>
           <div class="small muted">${a.desc}</div>
-       </div>`).join("") || "<div class='notice'>Sigue leyendo para desbloquear.</div>";
+       </div>`).join("") || "<div class='notice'>Keep reading to unlock.</div>";
 
-  // Crear contenedor para Locked si no existe (hack para restaurar funcionalidad)
+  // Render Locked (create container if missing)
   let lockCont = $("achNextList");
   if(!lockCont){
       const h2 = document.createElement("h2");
       h2.textContent = t("title_locked");
+      h2.id = "lbl_locked_ach";
       lockCont = document.createElement("div");
       lockCont.id = "achNextList";
       lockCont.className = "list";
@@ -303,8 +253,8 @@ function checkAchievements(){
       section.appendChild(h2);
       section.appendChild(lockCont);
   } else {
-     // Update header text
-     lockCont.previousElementSibling.textContent = t("title_locked");
+      const h2 = document.getElementById("lbl_locked_ach");
+      if(h2) h2.textContent = t("title_locked");
   }
 
   lockCont.innerHTML = locked.slice(0,3).map(a => `
@@ -340,14 +290,16 @@ function renderActiveBookCard(b){
   `;
 }
 
-// Share Logic Revamp
+// ---------- Share Logic ----------
 function showShareOptions(){
-    // Show a simple modal or overlays to pick type
     const opts = `
       <div style="display:flex; flex-direction:column; gap:10px">
         <button class="btn" onclick="generateShareImage('progress')">${t("share_opt_progress")}</button>
         <button class="btn" onclick="generateShareImage('finish')">${t("share_opt_finish")}</button>
-        <button class="btn" onclick="generateShareImage('stats')">${t("share_opt_stats")}</button>
+        <hr class="sep" style="width:100%"/>
+        <button class="btn" onclick="generateShareImage('stats_quarter')">${t("share_opt_quarter")}</button>
+        <button class="btn" onclick="generateShareImage('stats_semester')">${t("share_opt_semester")}</button>
+        <button class="btn" onclick="generateShareImage('stats_year')">${t("share_opt_year")}</button>
       </div>
     `;
     $("storyHint").innerHTML = opts; 
@@ -361,64 +313,51 @@ async function generateShareImage(type){
    const W = 1080, H = 1920;
    cvs.width = W; cvs.height = H;
    
-   // Background
    const grd = ctx.createLinearGradient(0,0,0,H);
    grd.addColorStop(0, "#1a1a1a"); grd.addColorStop(1, "#000000");
    ctx.fillStyle = grd; ctx.fillRect(0,0,W,H);
    
-   // Common Data
-   const b = activeBook();
-   
-   // Helper to load image
-   const loadImg = (src) => new Promise(r => { 
-       const i = new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; 
-   });
+   const loadImg = (src) => new Promise(r => { const i = new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; });
 
-   if(type === 'stats'){
-       // YEARLY STATS
-       ctx.fillStyle = "#fff"; ctx.textAlign="center";
-       ctx.font = "bold 80px sans-serif"; ctx.fillText("Resumen de Lectura", W/2, 200);
+   if(type.startsWith('stats')){
+       // REPORT
+       let days = 365;
+       if(type.includes('quarter')) days = 90;
+       if(type.includes('semester')) days = 180;
        
-       const days = 365;
-       const totalP = state.sessions.filter(s=>inRange(s.endISO||s.startISO, days)).reduce((a,x)=>a+(x.pages||0),0);
-       const totalM = state.sessions.filter(s=>inRange(s.endISO||s.startISO, days)).reduce((a,x)=>a+(x.mins||0),0);
+       const sessionsIn = state.sessions.filter(s=>inRange(s.endISO||s.startISO, days));
+       const pagesSess = sessionsIn.reduce((a,x)=>a+(x.pages||0),0);
+       const minsSess = sessionsIn.reduce((a,x)=>a+(x.mins||0),0);
        const booksFin = Object.values(state.books).filter(bk=>bk.totalPages && bk.currentPage>=bk.totalPages).length;
-
-       ctx.font = "40px sans-serif"; ctx.fillStyle="#aaa";
-       ctx.fillText("Este año", W/2, 300);
+       
+       ctx.fillStyle = "#fff"; ctx.textAlign="center";
+       ctx.font = "bold 80px sans-serif"; ctx.fillText(t("lbl_this_period"), W/2, 200);
+       ctx.font = "40px sans-serif"; ctx.fillStyle="#aaa"; ctx.fillText(t("share_opt_"+type.split('_')[1]) || "Report", W/2, 300);
        
        let y = 600;
        const drawStat = (label, val, unit) => {
-           ctx.fillStyle="#fff"; ctx.font="bold 120px monospace";
-           ctx.fillText(val, W/2, y);
-           ctx.fillStyle="#4caf50"; ctx.font="bold 40px sans-serif";
-           ctx.fillText(unit, W/2, y+60);
-           ctx.fillStyle="#888"; ctx.font="30px sans-serif";
-           ctx.fillText(label, W/2, y+110);
+           ctx.fillStyle="#fff"; ctx.font="bold 120px monospace"; ctx.fillText(val, W/2, y);
+           ctx.fillStyle="#4caf50"; ctx.font="bold 40px sans-serif"; ctx.fillText(unit, W/2, y+60);
+           ctx.fillStyle="#888"; ctx.font="30px sans-serif"; ctx.fillText(label, W/2, y+110);
            y += 350;
        }
        
-       drawStat("Páginas Leídas", totalP, "PÁGINAS");
-       drawStat("Tiempo Dedicado", Math.round(totalM/60), "HORAS");
-       drawStat("Libros Terminados", booksFin, "LIBROS");
+       drawStat(t("lbl_pages_read"), pagesSess, t("lbl_pages"));
+       drawStat(t("lbl_time_ded"), Math.round(minsSess/60), t("lbl_hours"));
+       drawStat(t("lbl_books_fin"), booksFin, t("lbl_books"));
 
    } else {
-       // BOOK SPECIFIC (Progress or Finish)
+       // BOOK SPECIFIC
+       const b = activeBook();
        if(!b) return;
        
-       // Draw Cover Blur BG
        if(b.coverData){
            const img = await loadImg(b.coverData);
            if(img){
-               ctx.save();
-               ctx.globalAlpha = 0.2;
-               ctx.drawImage(img, -200, -200, W+400, H+400); // Zoom blur effect
+               ctx.save(); ctx.globalAlpha = 0.2;
+               ctx.drawImage(img, -200, -200, W+400, H+400); 
                ctx.restore();
-               
-               // Main Cover
-               const coverW = 600; const coverH = 900;
-               const x = (W-coverW)/2;
-               // Shadow
+               const coverW = 600; const coverH = 900; const x = (W-coverW)/2;
                ctx.fillStyle="rgba(0,0,0,0.5)"; ctx.fillRect(x+20, 320, coverW, coverH);
                ctx.drawImage(img, x, 300, coverW, coverH);
            }
@@ -428,36 +367,28 @@ async function generateShareImage(type){
        ctx.font = "bold 60px sans-serif";
        ctx.fillText(b.title.substr(0,25) + (b.title.length>25?"...":""), W/2, 1350);
        ctx.font = "italic 40px sans-serif"; ctx.fillStyle = "#ccc";
-       ctx.fillText(b.author || "Autor Desconocido", W/2, 1420);
+       ctx.fillText(b.author || "Unknown", W/2, 1420);
        
        if(type === 'finish'){
-           // Stars
            const rating = b.rating || 5;
            let stars = "⭐".repeat(rating);
            ctx.font = "80px sans-serif"; ctx.fillText(stars, W/2, 1550);
-           
            ctx.fillStyle = "#4caf50"; ctx.font = "bold 50px sans-serif";
-           ctx.fillText("LIBRO TERMINADO", W/2, 200);
+           ctx.fillText(t("share_opt_finish").toUpperCase(), W/2, 200);
        } else {
-           // Progress
            const pct = b.totalPages ? Math.round((b.currentPage/b.totalPages)*100) : 0;
-           ctx.fillStyle = "#fff"; ctx.font = "bold 100px monospace";
-           ctx.fillText(pct + "%", W/2, 1600);
-           
-           // Bar
+           ctx.fillStyle = "#fff"; ctx.font = "bold 100px monospace"; ctx.fillText(pct + "%", W/2, 1600);
            ctx.fillStyle="#333"; ctx.fillRect(140, 1650, 800, 30);
            ctx.fillStyle="#4caf50"; ctx.fillRect(140, 1650, 8 * pct, 30);
        }
    }
    
-   // Footer
    ctx.fillStyle = "#555"; ctx.font = "30px monospace";
    ctx.fillText("BookQuest App", W/2, H - 100);
 
-   // Output
    $("storyPreview").src = cvs.toDataURL();
    $("storyPreview").style.display = "block";
-   $("storyHint").textContent = ""; // clear menu
+   $("storyHint").textContent = ""; 
    $("downloadStory").disabled = false;
    $("downloadStory").onclick = () => {
       const a = document.createElement("a");
@@ -472,8 +403,16 @@ function addBook(){
   const title = $("newTitle").value.trim() || "Untitled";
   const total = Number($("newTotal").value);
   if(!total){ alert(t("alert_pages_req")); return; }
+  
+  // FIX: Smarter placeholder deletion logic
   const bookIds = Object.keys(state.books);
-  if(bookIds.length === 1 && state.books[bookIds[0]].isPlaceholder) delete state.books[bookIds[0]];
+  if(bookIds.length === 1) {
+      const existing = state.books[bookIds[0]];
+      // Delete if marked as placeholder OR matches known default names (legacy fix)
+      if(existing.isPlaceholder || existing.title === "Mi Primer Libro" || existing.title === "My First Book"){
+          delete state.books[bookIds[0]];
+      }
+  }
 
   const id = uid();
   const newB = { id, title, totalPages:total, currentPage: Number($("newCurrent").value||0), createdAt:new Date().toISOString(), author: $("newAuthor").value };
@@ -496,11 +435,10 @@ function saveBook(){
   b.totalPages = Number($("editTotal").value);
   b.currentPage = Number($("editCurrent").value);
   
-  // Save extra fields injected via JS
   if($("editTimesRead")) b.timesRead = Number($("editTimesRead").value);
   if($("editRating")) b.rating = Number($("editRating").value);
+  if($("editAuthor")) b.author = $("editAuthor").value;
   
-  // Handle cover update if file selected
   const f = $("editCoverBtn")?.files[0];
   if(f){
       const r = new FileReader();
@@ -536,6 +474,13 @@ function rereadBook(){
 
 // ---------- Render Logic ----------
 function renderAll(){
+  // Hide removed tabs
+  const hideTab = (name) => {
+      const btn = document.querySelector(`button[data-tab='${name}']`);
+      if(btn) btn.style.display = "none";
+  };
+  hideTab("stats"); hideTab("history");
+
   const sel = $("bookSelect"); const qSel = $("quoteBookSelect");
   const ids = Object.keys(state.books);
   const opts = ids.map(id=> `<option value="${id}">${state.books[id].title}</option>`).join("");
@@ -544,46 +489,56 @@ function renderAll(){
 
   const b = activeBook();
   if(b){
-    // Basic Edit Fields
     $("editTitle").value = b.title || "";
     $("editTotal").value = b.totalPages || 0;
     $("editCurrent").value = b.currentPage || 0;
-    $("timesReadVal").textContent = b.timesRead || 0;
 
-    // --- Inject Extra Edit Fields (Cover, TimesRead, Rating) ---
-    // We target the parent of editCurrent and append if missing
+    // --- Inject Session Select ---
+    const sessionHeader = document.querySelector("#tab-session h2");
+    if(sessionHeader){
+        const oldSel = document.getElementById("sessionBookSel");
+        if(oldSel) oldSel.remove();
+        const div = document.createElement("div");
+        div.id = "sessionBookSel";
+        div.style.marginBottom = "15px";
+        div.innerHTML = `<select onchange="state.activeBookId=this.value; save(); renderAll();" style="width:100%">${opts}</select>`;
+        sessionHeader.parentNode.insertBefore(div, sessionHeader.nextSibling);
+        div.querySelector("select").value = state.activeBookId;
+    }
+
+    // --- Inject Edit Fields ---
     const container = $("editCurrent").parentNode.parentNode; // formGrid
     if(!document.getElementById("editCoverBtn")){
-        // HTML Injection for Edit Fields
         const extras = document.createElement("div");
         extras.className = "field span2";
-        extras.style.marginTop = "10px";
-        extras.style.borderTop = "1px solid #333";
-        extras.style.paddingTop = "10px";
+        extras.style.marginTop = "10px"; extras.style.borderTop = "1px solid #333"; extras.style.paddingTop = "10px";
         extras.innerHTML = `
            <div class="row">
+             <div class="field">
+                <label>${t("lbl_author")}</label>
+                <input type="text" id="editAuthor">
+             </div>
              <div class="field">
                 <label>${t("lbl_change_cover")}</label>
                 <input type="file" id="editCoverBtn" accept="image/*">
              </div>
              <div class="field">
                 <label>${t("lbl_times_read")}</label>
-                <input type="number" id="editTimesRead" value="${b.timesRead||0}">
+                <input type="number" id="editTimesRead">
              </div>
              <div class="field">
                 <label>${t("lbl_rating")}</label>
-                <input type="number" id="editRating" min="0" max="5" value="${b.rating||0}">
+                <input type="number" id="editRating" min="0" max="5">
              </div>
            </div>
         `;
-        // Insert before the buttons
         const btnRow = container.querySelector(".span2:last-child");
         container.insertBefore(extras, btnRow);
-    } else {
-        // Just update values
-        $("editTimesRead").value = b.timesRead || 0;
-        $("editRating").value = b.rating || 0;
     }
+    // Update values
+    if($("editAuthor")) $("editAuthor").value = b.author || "";
+    if($("editTimesRead")) $("editTimesRead").value = b.timesRead || 0;
+    if($("editRating")) $("editRating").value = b.rating || 0;
 
     const isFinished = b.totalPages && b.currentPage >= b.totalPages;
     $("markUnread").style.display = isFinished ? "inline-block" : "none";
@@ -592,7 +547,6 @@ function renderAll(){
     const pct = b.totalPages ? Math.round((b.currentPage/b.totalPages)*100) : 0;
     $("progress").textContent = `${b.currentPage}/${b.totalPages} (${pct}%)`;
     
-    // Pace calculation
     const sessions = state.sessions.filter(s=>s.bookId === b.id);
     let p=0, m=0;
     sessions.slice(-10).forEach(s=>{ p+=s.pages||0; m+=s.mins||0; });
@@ -605,14 +559,8 @@ function renderAll(){
 
     renderActiveBookCard(b);
     
-    // Stats Charts
+    // Simple Range Stats (still useful for Dashboard)
     const d = rangeDays();
-    const agg = aggregateDaily(b.id, d);
-    drawBarChart($("chartPages"), agg.labels, agg.pagesArr);
-    const aggAll = aggregateDaily(null, d);
-    drawBarChart($("chartAllPages"), aggAll.labels, aggAll.pagesArr);
-
-    // KPI
     const totalPages = state.sessions.filter(s=>inRange(s.endISO||s.startISO, d)).reduce((a,x)=>a+(x.pages||0),0);
     const totalMins = state.sessions.filter(s=>inRange(s.endISO||s.startISO, d)).reduce((a,x)=>a+(x.mins||0),0);
     $("pagesRange").textContent = totalPages;
@@ -623,12 +571,10 @@ function renderAll(){
   
   renderQuotes();
   checkAchievements(); 
-  const hist = [...state.sessions].slice(-25).reverse();
-  $("history").innerHTML = hist.map(s=>{ return `<div class="item"><b>${(s.endISO||"").slice(0,10)}</b> <span class="muted">${s.mins}m</span></div>`; }).join("");
   $("buildVersion").textContent = BUILD_VERSION;
 }
 
-// ---------- Drive Sync (Persistent-ish) ----------
+// ---------- Drive Sync ----------
 function driveTokenClient(){
   const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
   if(!window.google) return null;
@@ -652,10 +598,7 @@ function driveSignIn(){ if(!_tokenClient) _tokenClient = driveTokenClient(); if(
 async function handleDriveError(res){
     if(res.status === 401){
         $("driveStatus").textContent = t("status_token_exp");
-        // Try to refresh implicitly
-        if(!_tokenClient) _tokenClient = driveTokenClient();
-        // Prompt empty to try silent or minimal prompt
-        _tokenClient.requestAccessToken({prompt: ""}); 
+        if(_tokenClient) _tokenClient.requestAccessToken({prompt: ""});
         return true; 
     }
     return false;
@@ -683,7 +626,7 @@ async function drivePull(){
     Object.assign(state, data); state.drive.fileId = fileId; state.drive.lastSyncISO = new Date().toISOString();
     ensureDefaultBook(); save(); renderAll();
     $("driveStatus").textContent = `${t("status_loaded")} (${new Date().toLocaleTimeString()})`;
-  }catch(e){ console.log(e); $("driveStatus").textContent = "Error pulling."; }
+  }catch(e){ console.log(e); }
 }
 async function drivePush(){
   try{
@@ -705,7 +648,7 @@ async function drivePush(){
     }
     state.drive.lastSyncISO = new Date().toISOString(); save();
     $("driveStatus").textContent = `${t("status_saved")} (${new Date().toLocaleTimeString()})`;
-  }catch(e){ console.log(e); $("driveStatus").textContent = "Error saving."; }
+  }catch(e){ console.log(e); }
 }
 
 // ---------- Init ----------
@@ -721,7 +664,7 @@ function bind(){
   $("pause").addEventListener("click", ()=>togglePause(false));
   $("finish").addEventListener("click", finishSession);
   $("hyper").addEventListener("click", hyperfocus);
-  $("makeStory").addEventListener("click", showShareOptions); // Modified binding
+  $("makeStory").addEventListener("click", showShareOptions); 
   $("rangeSelect").addEventListener("change", renderAll);
 
   document.querySelectorAll(".tabbtn").forEach(btn => {
@@ -735,10 +678,9 @@ function bind(){
     });
   });
   $("driveSignIn").addEventListener("click", driveSignIn);
-  $("drivePull").addEventListener("click", drivePull);
+  $("drivePull").style.display = 'none'; 
   $("drivePush").addEventListener("click", drivePush);
   
-  // OCR Logic reuse (preserved)
   let cropper=null;
   $("quoteImage").addEventListener("change", (e)=>{
     const f=e.target.files[0]; if(!f)return;
