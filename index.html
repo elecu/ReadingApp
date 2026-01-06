@@ -16,10 +16,6 @@
 </head>
 <body>
   <header class="top">
-    <div class="lang-switch">
-      <button id="langToggle" class="btn small-btn" type="button">🇲🇽 ES</button>
-    </div>
-
     <h1 class="brand">BookQuest</h1>
     <nav class="tabs" aria-label="Navigation">
       <button class="tabbtn active" data-tab="dashboard" type="button" data-i18n="nav_dashboard">Dashboard</button>
@@ -28,8 +24,8 @@
       <button class="tabbtn" data-tab="stats" type="button" data-i18n="nav_stats">Stats</button>
       <button class="tabbtn" data-tab="achievements" type="button" data-i18n="nav_achievements">Achievements</button>
       <button class="tabbtn" data-tab="quotes" type="button" data-i18n="nav_quotes">Quotes</button>
-      <button class="tabbtn" data-tab="sync" type="button" data-i18n="nav_sync">Sync</button>
       <button class="tabbtn" data-tab="history" type="button" data-i18n="nav_history">History</button>
+      <button class="tabbtn" data-tab="settings" type="button" data-i18n="nav_settings">Settings</button>
     </nav>
   </header>
 
@@ -38,7 +34,6 @@
       <div class="grid">
         <section class="card col-8">
           <h2 data-i18n="dash_title">Dashboard</h2>
-
           <div class="row">
             <div class="field">
               <label for="rangeSelect" data-i18n="lbl_stats_range">Stats range</label>
@@ -51,7 +46,6 @@
                 <option value="99999" data-i18n="opt_alltime">All time</option>
               </select>
             </div>
-
             <div class="field">
               <label for="storyScope" data-i18n="lbl_export_scope">Story export scope</label>
               <select id="storyScope">
@@ -85,7 +79,6 @@
             <button class="btn" id="downloadStory" type="button" disabled data-i18n="btn_dl_story">Download Story PNG</button>
             <span class="small" id="storyHint"></span>
           </div>
-
           <div class="previewRow">
             <img id="storyPreview" class="preview" alt="Story preview" />
             <canvas id="storyCanvas" width="1080" height="1920" class="hidden" aria-hidden="true"></canvas>
@@ -99,7 +92,7 @@
           <div class="row">
             <button class="btn" id="markFinished" type="button" data-i18n="btn_mark_finish">Mark finished</button>
           </div>
-          <div class="notice" data-i18n="notice_finish">Finishing is based on reaching total pages (or marking manually).</div>
+          <div class="notice" data-i18n="notice_finish">Finishing is based on reaching total pages.</div>
         </section>
 
         <section class="card col-12">
@@ -130,7 +123,6 @@
       <div class="grid">
         <section class="card col-12">
           <h2 data-i18n="nav_books">Books</h2>
-
           <div class="row">
             <div class="field grow">
               <label for="bookSelect" data-i18n="lbl_active_select">Active book</label>
@@ -145,27 +137,22 @@
                 <label for="newTitle" data-i18n="lbl_title">Title</label>
                 <input id="newTitle" type="text" placeholder="e.g. Canto 2" />
               </div>
-
               <div class="field">
                 <label for="newAuthor" data-i18n="lbl_author">Author</label>
                 <input id="newAuthor" type="text" placeholder="e.g. ..." />
               </div>
-
               <div class="field">
                 <label for="newTotal" data-i18n="lbl_total_pages">Total pages</label>
                 <input id="newTotal" inputmode="numeric" placeholder="e.g. 320" />
               </div>
-
               <div class="field">
                 <label for="newCurrent" data-i18n="lbl_cur_page">Current page</label>
                 <input id="newCurrent" inputmode="numeric" placeholder="e.g. 0" />
               </div>
-
               <div class="field">
                 <label for="newCover" data-i18n="lbl_cover">Cover image</label>
                 <input id="newCover" type="file" accept="image/png,image/jpeg,image/jpg" />
               </div>
-
               <div class="field span2">
                 <button class="btn primary" id="addBook" type="button" data-i18n="btn_add">Add</button>
               </div>
@@ -187,9 +174,17 @@
                 <label for="editCurrent" data-i18n="lbl_cur_page">Current page</label>
                 <input id="editCurrent" inputmode="numeric" />
               </div>
+              <div class="field">
+                <div class="row">
+                  <div class="badge"><span>🔄</span><span id="timesReadVal">0</span> <span data-i18n="lbl_reads">reads</span></div>
+                </div>
+              </div>
+              
               <div class="field span2">
                 <div class="row">
                   <button class="btn primary" id="saveBook" type="button" data-i18n="btn_save">Save</button>
+                  <button class="btn" id="markUnread" type="button" style="display:none" data-i18n="btn_mark_unread">Mark Unread</button>
+                  <button class="btn" id="rereadBook" type="button" style="display:none" data-i18n="btn_reread">Re-read Book</button>
                   <button class="btn danger" id="deleteBook" type="button" data-i18n="btn_delete">Delete book</button>
                 </div>
               </div>
@@ -203,7 +198,6 @@
       <div class="grid">
         <section class="card col-8">
           <h2 data-i18n="nav_session">Session</h2>
-
           <div class="row">
             <div class="field">
               <label for="mode" data-i18n="lbl_mode">Mode</label>
@@ -212,25 +206,20 @@
                 <option value="open">Open</option>
               </select>
             </div>
-
             <div class="field">
               <label for="sprintMins" data-i18n="lbl_sprint_mins">Sprint (minutes)</label>
               <input id="sprintMins" inputmode="numeric" value="8" />
             </div>
           </div>
-
           <div class="row">
             <button class="btn primary" id="start" type="button" data-i18n="btn_start">Start</button>
             <button class="btn" id="pause" type="button" disabled data-i18n="btn_pause">Pause</button>
             <button class="btn" id="finish" type="button" disabled data-i18n="btn_end">End session</button>
             <button class="btn" id="hyper" type="button" disabled data-i18n="btn_hyper">Keep going</button>
           </div>
-
           <div class="timer" id="timerBig">00:00</div>
           <div class="notice" id="timerHint"></div>
-
           <hr class="sep" />
-
           <div id="countInputs" class="row">
             <div class="field">
               <label for="pagesRead" data-i18n="lbl_pages_read">Pages read</label>
@@ -238,7 +227,6 @@
             </div>
           </div>
         </section>
-
         <section class="card col-4">
           <h2 data-i18n="title_active_stats">Active book stats</h2>
           <div class="kpis kpis2">
@@ -287,6 +275,13 @@
           <h2 data-i18n="title_add_quote">Add a quote</h2>
           
           <div class="field">
+            <label for="quoteBookSelect" data-i18n="lbl_select_book">Select Book (Optional)</label>
+            <select id="quoteBookSelect">
+              <option value="" data-i18n="opt_none">-- None --</option>
+            </select>
+          </div>
+
+          <div class="field">
             <label for="quoteImage" data-i18n="lbl_quote_img">1. Photo / Scan (Optional)</label>
             <input id="quoteImage" type="file" accept="image/*" />
             <div class="notice" data-i18n="notice_ocr">Upload to crop & extract text.</div>
@@ -299,11 +294,15 @@
 
           <div class="row">
             <div class="field">
-              <label for="quoteAuthor" data-i18n="lbl_author">Quote author</label>
+              <label for="quoteAuthor" data-i18n="lbl_author">Author</label>
               <input id="quoteAuthor" type="text" />
             </div>
             <div class="field">
-              <label for="quotePage" data-i18n="lbl_page">Page</label>
+              <label for="quoteBookTitle" data-i18n="lbl_book_title">Book Title</label>
+              <input id="quoteBookTitle" type="text" />
+            </div>
+             <div class="field">
+              <label for="quotePage" data-i18n="lbl_page">Page (Info)</label>
               <input id="quotePage" inputmode="numeric" />
             </div>
           </div>
@@ -315,26 +314,14 @@
 
         <section class="card col-6">
           <h2 data-i18n="title_saved_quotes">Saved quotes</h2>
-          <div class="list" id="quotesList"></div>
-        </section>
-      </div>
-    </section>
-
-    <section class="tab" id="tab-sync">
-      <div class="grid">
-        <section class="card col-12">
-          <h2 data-i18n="nav_sync">Sync</h2>
-          <details open>
-            <summary>Google Drive</summary>
-            <div class="notice" data-i18n="drive_desc">Stores progress as a JSON file in your Drive app data folder.</div>
-
-            <div class="row">
-              <button class="btn primary" id="driveSignIn" type="button" data-i18n="btn_signin">Sign in with Google</button>
-              <button class="btn" id="drivePull" type="button" data-i18n="btn_pull">Pull from Drive</button>
-              <button class="btn" id="drivePush" type="button" data-i18n="btn_push">Save to Drive</button>
-              <div class="badge"><span>☁️</span><span id="driveStatus">Not signed in</span></div>
-            </div>
-          </details>
+          <div class="list" id="quotesListContainer"></div>
+          
+           <canvas id="quoteGenCanvas" width="1080" height="1920" class="hidden"></canvas>
+          <div class="row" id="quoteGenActions" style="display:none; margin-top:15px; border-top:1px solid #333; padding-top:10px;">
+             <span class="small" style="width:100%" data-i18n="lbl_gen_image">Generate Image for selected:</span>
+             <button class="btn" id="btnGenStory" data-i18n="btn_story">Story (9:16)</button>
+             <button class="btn" id="btnGenPost" data-i18n="btn_post">Post (1:1)</button>
+          </div>
         </section>
       </div>
     </section>
@@ -345,12 +332,43 @@
           <h2 data-i18n="nav_history">History</h2>
           <div class="list" id="history"></div>
         </section>
-        
-        <div class="col-12" style="text-align: center; margin-top: 20px;">
-          <span class="small muted" id="buildVersion"></span>
-        </div>
       </div>
     </section>
+
+    <section class="tab" id="tab-settings">
+      <div class="grid">
+        <section class="card col-12">
+          <h2 data-i18n="nav_settings">Settings</h2>
+          
+          <div class="row" style="margin-bottom: 20px;">
+             <label style="width:100%" data-i18n="lbl_language">Language / Idioma</label>
+             <div class="lang-switch-static">
+                <button id="langEn" class="btn small-btn">🇬🇧 EN</button>
+                <button id="langEs" class="btn small-btn">🇲🇽 ES</button>
+             </div>
+          </div>
+
+          <hr class="sep" />
+
+          <h3 data-i18n="sec_sync">Sync & Backup</h3>
+          <details open>
+            <summary>Google Drive</summary>
+            <div class="notice" data-i18n="drive_desc">Stores progress as a JSON file in your Drive app data folder.</div>
+            <div class="row">
+              <button class="btn primary" id="driveSignIn" type="button" data-i18n="btn_signin">Sign in with Google</button>
+              <button class="btn" id="drivePull" type="button" data-i18n="btn_pull">Pull from Drive</button>
+              <button class="btn" id="drivePush" type="button" data-i18n="btn_push">Save to Drive</button>
+              <div class="badge"><span>☁️</span><span id="driveStatus">Not signed in</span></div>
+            </div>
+          </details>
+
+           <div class="col-12" style="text-align: center; margin-top: 40px;">
+            <span class="small muted" id="buildVersion"></span>
+          </div>
+        </section>
+      </div>
+    </section>
+
   </main>
 
   <div class="modalOverlay" id="cropperOverlay" aria-hidden="true">
@@ -371,11 +389,9 @@
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
-  
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
   <script src="https://unpkg.com/tesseract.js@v4.0.2/dist/tesseract.min.js"></script>
 
-  <script src="./config.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
