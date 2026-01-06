@@ -1,16 +1,15 @@
 const $ = (id) => document.getElementById(id);
 
 // Config
-const STORAGE_KEY = "bookquest_state_v2";
+const STORAGE_KEY = "bookquest_state_v3"; // Bumped version for new fields
 const DRIVE_FILENAME = "bookquest_state.json";
-const BUILD_VERSION = "Build v0.5.0-alpha"; 
-// Hardcoded Client ID as requested (removed from UI)
+const BUILD_VERSION = "Build v0.6.0-beta"; 
 const GOOGLE_CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
 
 // I18N Dictionary
 const TRANSLATIONS = {
   en: {
-    nav_dashboard: "Dashboard", nav_books: "Books", nav_session: "Session", nav_stats: "Stats", nav_achievements: "Achievements", nav_quotes: "Quotes", nav_sync: "Sync", nav_history: "History",
+    nav_dashboard: "Dashboard", nav_books: "Books", nav_session: "Session", nav_stats: "Stats", nav_achievements: "Achievements", nav_quotes: "Quotes", nav_settings: "Settings", nav_history: "History",
     dash_title: "Dashboard", lbl_stats_range: "Stats range", lbl_export_scope: "Story export scope",
     opt_7days: "7 days", opt_30days: "30 days", opt_3months: "3 months", opt_6months: "6 months", opt_1year: "1 year", opt_alltime: "All time",
     opt_active_book: "Active book", opt_overall: "Overall",
@@ -19,19 +18,19 @@ const TRANSLATIONS = {
     title_active_book: "Active book", btn_mark_finish: "Mark finished", notice_finish: "Finishing is based on reaching total pages.",
     title_overall: "Overall", kpi_books: "Books", kpi_finished: "Finished", kpi_pages: "Pages", kpi_minutes: "Minutes",
     sum_add_book: "Add a book", lbl_title: "Title", lbl_author: "Author", lbl_total_pages: "Total pages", lbl_cur_page: "Current page", lbl_cover: "Cover image", btn_add: "Add",
-    sum_edit_book: "Edit active book", btn_save: "Save", btn_delete: "Delete book",
+    sum_edit_book: "Edit active book", btn_save: "Save", btn_delete: "Delete book", btn_mark_unread: "Mark Unread", btn_reread: "Re-read Book", lbl_reads: "times read",
     lbl_mode: "Mode", lbl_sprint_mins: "Sprint (minutes)", btn_start: "Start", btn_pause: "Pause", btn_end: "End session", btn_hyper: "Keep going",
     lbl_pages_read: "Pages read", title_active_stats: "Active book stats", kpi_progress: "Progress", kpi_pace: "Pace",
     title_chart_book: "Active book charts", title_chart_overall: "Overall charts", title_unlocked: "Unlocked",
-    title_add_quote: "Add a quote", lbl_quote_img: "1. Photo / Scan (Optional)", notice_ocr: "Upload to crop & extract text.", lbl_quote_text: "2. Quote Text", lbl_page: "Page", btn_save_quote: "Save quote", title_saved_quotes: "Saved quotes",
-    drive_desc: "Stores progress as a JSON file in your Drive app data folder.", btn_signin: "Sign in with Google", btn_pull: "Pull from Drive", btn_push: "Save to Drive",
+    title_add_quote: "Add a quote", lbl_select_book: "Select Book", opt_none: "-- None --", lbl_quote_img: "1. Photo / Scan (Optional)", notice_ocr: "Upload to crop & extract text.", lbl_quote_text: "2. Quote Text", lbl_book_title: "Book Title", lbl_page: "Page (Info)", btn_save_quote: "Save quote", title_saved_quotes: "Saved quotes", lbl_gen_image: "Generate Image:", btn_story: "Story (9:16)", btn_post: "Post (1:1)",
+    sec_sync: "Sync & Backup", lbl_language: "Language", drive_desc: "Stores progress as a JSON file in your Drive app data folder.", btn_signin: "Sign in with Google", btn_pull: "Pull from Drive", btn_push: "Save to Drive",
     modal_crop_title: "Crop & Scan", btn_scan: "Extract Text", btn_cancel: "Cancel",
     hint_paused: "Paused", hint_sprint_done: "Sprint complete ✅", hint_flow: "Flow mode.", hint_start: "Ready?",
     alert_pages_req: "Please enter total pages.", alert_imported: "Imported ✅", alert_ocr_error: "Could not read text.",
     status_scanning: "Scanning text...", status_connected: "Connected ✅"
   },
   es: {
-    nav_dashboard: "Tablero", nav_books: "Libros", nav_session: "Sesión", nav_stats: "Estadísticas", nav_achievements: "Logros", nav_quotes: "Citas", nav_sync: "Sincronizar", nav_history: "Historial",
+    nav_dashboard: "Tablero", nav_books: "Libros", nav_session: "Sesión", nav_stats: "Estadísticas", nav_achievements: "Logros", nav_quotes: "Citas", nav_settings: "Ajustes", nav_history: "Historial",
     dash_title: "Tablero", lbl_stats_range: "Rango de estadísticas", lbl_export_scope: "Alcance de exportación",
     opt_7days: "7 días", opt_30days: "30 días", opt_3months: "3 meses", opt_6months: "6 meses", opt_1year: "1 año", opt_alltime: "Todo el tiempo",
     opt_active_book: "Libro activo", opt_overall: "General",
@@ -40,12 +39,12 @@ const TRANSLATIONS = {
     title_active_book: "Libro activo", btn_mark_finish: "Marcar terminado", notice_finish: "Se basa en alcanzar el total de páginas.",
     title_overall: "General", kpi_books: "Libros", kpi_finished: "Terminados", kpi_pages: "Páginas", kpi_minutes: "Minutos",
     sum_add_book: "Agregar libro", lbl_title: "Título", lbl_author: "Autor", lbl_total_pages: "Páginas totales", lbl_cur_page: "Página actual", lbl_cover: "Portada", btn_add: "Agregar",
-    sum_edit_book: "Editar libro activo", btn_save: "Guardar", btn_delete: "Borrar libro",
+    sum_edit_book: "Editar libro activo", btn_save: "Guardar", btn_delete: "Borrar libro", btn_mark_unread: "Marcar NO leído", btn_reread: "Releer Libro", lbl_reads: "leídas",
     lbl_mode: "Modo", lbl_sprint_mins: "Sprint (minutos)", btn_start: "Comenzar", btn_pause: "Pausa", btn_end: "Terminar sesión", btn_hyper: "Seguir (Hyperfocus)",
     lbl_pages_read: "Páginas leídas", title_active_stats: "Estadísticas activas", kpi_progress: "Progreso", kpi_pace: "Ritmo",
     title_chart_book: "Gráficos del libro", title_chart_overall: "Gráficos generales", title_unlocked: "Desbloqueado",
-    title_add_quote: "Agregar cita", lbl_quote_img: "1. Foto / Escanear (Opcional)", notice_ocr: "Sube para recortar y extraer texto.", lbl_quote_text: "2. Texto de la cita", lbl_page: "Página", btn_save_quote: "Guardar cita", title_saved_quotes: "Citas guardadas",
-    drive_desc: "Guarda el progreso como JSON en tu Google Drive.", btn_signin: "Iniciar sesión Google", btn_pull: "Traer de Drive", btn_push: "Guardar en Drive",
+    title_add_quote: "Agregar cita", lbl_select_book: "Elegir Libro", opt_none: "-- Ninguno --", lbl_quote_img: "1. Foto / Escanear (Opcional)", notice_ocr: "Sube para recortar y extraer texto.", lbl_quote_text: "2. Texto de la cita", lbl_book_title: "Título del libro", lbl_page: "Página (Info)", btn_save_quote: "Guardar cita", title_saved_quotes: "Citas guardadas", lbl_gen_image: "Generar Imagen:", btn_story: "Story (9:16)", btn_post: "Post (1:1)",
+    sec_sync: "Respaldo y Sync", lbl_language: "Idioma", drive_desc: "Guarda el progreso como JSON en tu Google Drive.", btn_signin: "Iniciar sesión Google", btn_pull: "Traer de Drive", btn_push: "Guardar en Drive",
     modal_crop_title: "Recortar y Escanear", btn_scan: "Extraer Texto", btn_cancel: "Cancelar",
     hint_paused: "En pausa", hint_sprint_done: "Sprint completo ✅", hint_flow: "Modo Flow.", hint_start: "¿Listo?",
     alert_pages_req: "Por favor pon el total de páginas.", alert_imported: "Importado ✅", alert_ocr_error: "No se pudo leer el texto.",
@@ -53,7 +52,7 @@ const TRANSLATIONS = {
   }
 };
 
-let currentLang = "en"; // Default British English
+let currentLang = "en"; 
 
 // ---------- State ----------
 const state = {
@@ -62,12 +61,10 @@ const state = {
   sessions: [],        
   timer: { running:false, mode:"sprint", sprintMins:8, startMs:0, elapsedMs:0, intervalId:null, bell:false, paused:false },
   drive: { token:null, fileId:null, lastSyncISO:null },
-  quotes: [] // New quotes array
+  quotes: [] 
 };
 
 function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
-function todayKey(d=new Date()){ return d.toISOString().slice(0,10); }
-function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
 function t(key){ return TRANSLATIONS[currentLang][key] || key; }
 
 function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
@@ -77,38 +74,29 @@ function load(){
   try{
     const data = JSON.parse(raw);
     Object.assign(state, data);
-    if(!state.quotes) state.quotes = []; // ensure quotes exist
+    if(!state.quotes) state.quotes = [];
   }catch(_){}
 }
 
 function updateLanguageUI(){
-  // Update elements with data-i18n
   document.querySelectorAll("[data-i18n]").forEach(el => {
     const key = el.getAttribute("data-i18n");
     if(TRANSLATIONS[currentLang][key]) el.textContent = TRANSLATIONS[currentLang][key];
   });
-  
-  // Toggle Button Text
-  $("langToggle").textContent = currentLang === "en" ? "🇲🇽 ES" : "🇬🇧 EN";
-  
-  // Re-render things that might have text inside
   renderAll();
 }
 
-function toggleLanguage(){
-  currentLang = currentLang === "en" ? "es" : "en";
+function setLanguage(lang){
+  currentLang = lang;
   updateLanguageUI();
 }
 
 function ensureDefaultBook(){
-  if(state.activeBookId && state.books[state.activeBookId]) return;
-  const ids = Object.keys(state.books);
-  if(ids.length){
-    state.activeBookId = ids[0];
-    return;
-  }
+  if(Object.keys(state.books).length > 0) return;
+  
   const id = uid();
-  state.books[id] = { id, title:"My First Book", totalPages:300, currentPage:0, createdAt:new Date().toISOString() };
+  // Mark as placeholder so we can delete it later if user adds a real book
+  state.books[id] = { id, title:"My First Book", totalPages:300, currentPage:0, createdAt:new Date().toISOString(), isPlaceholder: true };
   state.activeBookId = id;
 }
 
@@ -143,11 +131,7 @@ function startTimer(){
   state.timer.elapsedMs = 0;
   state.timer.bell = false;
   state.timer.paused = false;
-
-  $("start").disabled = true;
-  $("pause").disabled = false;
-  $("finish").disabled = false;
-  $("hyper").disabled = true;
+  updateTimerUI();
 
   const tick = () => {
     if(!state.timer.running || state.timer.paused) return;
@@ -156,32 +140,44 @@ function startTimer(){
     if(state.timer.mode === "sprint"){
       const target = state.timer.sprintMins * 60 * 1000;
       const remaining = target - state.timer.elapsedMs;
-
       if(remaining <= 0 && !state.timer.bell){
         state.timer.bell = true;
         beep();
         $("timerHint").textContent = t("hint_sprint_done");
         $("hyper").disabled = false;
       }
-      if(!state.timer.bell){
-        $("timerBig").textContent = formatMMSS(remaining);
-        $("timerHint").textContent = t("hint_start");
-      }else{
-        $("timerBig").textContent = "+" + formatMMSS(-remaining);
-      }
+      if(!state.timer.bell) $("timerBig").textContent = formatMMSS(remaining);
+      else $("timerBig").textContent = "+" + formatMMSS(-remaining);
     }else{
       $("timerBig").textContent = formatMMSS(state.timer.elapsedMs);
       $("timerHint").textContent = t("hint_flow");
     }
   };
-
   tick();
   state.timer.intervalId = setInterval(tick, 250);
   save();
 }
 
-function togglePause(){
+function updateTimerUI(){
+  $("start").disabled = state.timer.running;
+  $("pause").disabled = !state.timer.running;
+  $("finish").disabled = !state.timer.running;
+  $("pause").textContent = state.timer.paused ? "Resume" : t("btn_pause");
+}
+
+function togglePause(forcePause = false){
   if(!state.timer.running) return;
+  
+  if(forcePause){
+     if(!state.timer.paused){
+       state.timer.paused = true;
+       $("pause").textContent = "Resume";
+       $("timerHint").textContent = t("hint_paused");
+     }
+     save();
+     return;
+  }
+
   state.timer.paused = !state.timer.paused;
   if(state.timer.paused){
     $("pause").textContent = "Resume";
@@ -198,16 +194,10 @@ function finishSession(){
 
   state.timer.running = false;
   state.timer.paused = false;
-  if(state.timer.intervalId){
-    clearInterval(state.timer.intervalId);
-    state.timer.intervalId = null;
-  }
+  if(state.timer.intervalId) clearInterval(state.timer.intervalId);
 
-  $("start").disabled = false;
-  $("pause").disabled = true;
-  $("finish").disabled = true;
+  updateTimerUI();
   $("hyper").disabled = true;
-  $("pause").textContent = t("btn_pause");
 
   const book = activeBook();
   const endISO = new Date().toISOString();
@@ -227,85 +217,24 @@ function finishSession(){
   renderAll();
 }
 
-// ---------- Charts & Stats (Simplified) ----------
-function sessionsForBook(bookId){ return state.sessions.filter(s => s.bookId === bookId); }
-function averagePace(bookId){
-  const arr = sessionsForBook(bookId).filter(s => (s.pages||0) > 0);
-  if(!arr.length) return 0;
-  // Simple avg of last 10
-  const last = arr.slice(-10);
-  let p=0, m=0;
-  last.forEach(s=>{ p+=s.pages; m+=s.mins; });
-  return m ? p/m : 0;
-}
-function computeETA(bookId){
-  const b = state.books[bookId];
-  if(!b || !b.totalPages) return "—";
-  const rem = (b.totalPages||0) - (b.currentPage||0);
-  if(rem <= 0) return "Done 🎉";
-  const pace = averagePace(bookId);
-  if(pace <= 0) return "?";
-  const mins = rem / pace;
-  const h = mins/60;
-  return h < 24 ? `~${h.toFixed(1)}h` : `~${(h/24).toFixed(1)}d`;
-}
-
-function renderHistory(){
-  const hist = [...state.sessions].slice(-25).reverse();
-  $("history").innerHTML = hist.map(s=>{
-    const day = (s.endISO || s.startISO).slice(0,10);
-    const b = state.books[s.bookId];
-    return `
-      <div class="item">
-        <b>${day} · ${b ? b.title : "?"}</b>
-        <div class="muted small">${s.mins} min · ${s.pages} p.</div>
-      </div>
-    `;
-  }).join("");
-}
-
-function renderAll(){
-  // Books Select
-  const sel = $("bookSelect");
-  sel.innerHTML = Object.keys(state.books).map(id=> `<option value="${id}">${state.books[id].title}</option>`).join("");
-  sel.value = state.activeBookId;
-
-  // Active Book
-  const b = activeBook();
-  $("editTitle").value = b.title || "";
-  $("editTotal").value = b.totalPages || 0;
-  $("editCurrent").value = b.currentPage || 0;
-  
-  const pct = b.totalPages ? Math.round((b.currentPage/b.totalPages)*100) : 0;
-  $("progress").textContent = `${b.currentPage}/${b.totalPages} (${pct}%)`;
-  $("pace").textContent = averagePace(b.id).toFixed(2) + " p/min";
-  $("eta").textContent = computeETA(b.id);
-
-  // Quotes List
-  const bookQuotes = (state.quotes || []).filter(q => q.bookId === b.id);
-  $("quotesList").innerHTML = bookQuotes.map(q => `
-    <div class="item">
-      <div style="font-style:italic">"${q.text}"</div>
-      <div class="small muted">— ${q.author}, p.${q.page}</div>
-    </div>
-  `).join("");
-
-  // Version
-  $("buildVersion").textContent = BUILD_VERSION;
-  
-  renderHistory();
-}
-
 // ---------- CRUD Books ----------
 function addBook(){
   const title = $("newTitle").value.trim() || "Untitled";
   const total = Number($("newTotal").value);
   if(!total){ alert(t("alert_pages_req")); return; }
+  
+  // BUG FIX: Remove placeholder if it exists and is the only one
+  const bookIds = Object.keys(state.books);
+  if(bookIds.length === 1 && state.books[bookIds[0]].isPlaceholder){
+     delete state.books[bookIds[0]];
+  }
+
   const id = uid();
-  state.books[id] = { id, title, totalPages:total, currentPage: Number($("newCurrent").value||0), createdAt:new Date().toISOString() };
+  state.books[id] = { id, title, totalPages:total, currentPage: Number($("newCurrent").value||0), createdAt:new Date().toISOString(), author: $("newAuthor").value };
   state.activeBookId = id;
+  
   save(); renderAll();
-  $("newTitle").value=""; $("newTotal").value="";
+  $("newTitle").value=""; $("newTotal").value=""; $("newAuthor").value=""; $("newCurrent").value="";
 }
 
 function saveBook(){
@@ -323,73 +252,257 @@ function deleteBook(){
   save(); renderAll();
 }
 
+function markUnread(){
+  const b = activeBook();
+  if(!b) return;
+  // Reset to last page - 1 or something reasonable. User said "mark as no read in case of error".
+  // Assuming they finished it by mistake.
+  b.currentPage = Math.max(0, b.totalPages - 1); 
+  save(); renderAll();
+}
+
+function rereadBook(){
+  const b = activeBook();
+  if(!b) return;
+  if(!confirm("Re-read this book? Count will increase, page reset to 0.")) return;
+  b.timesRead = (b.timesRead || 0) + 1;
+  b.currentPage = 0;
+  save(); renderAll();
+}
+
 // ---------- Quotes & OCR ----------
 let cropper = null;
+let lastSelectedQuote = null; // for generating image
 
 function setupOCR(){
-  // 1. Select File
   $("quoteImage").addEventListener("change", (e)=>{
     const file = e.target.files[0];
     if(!file) return;
-    
-    // Show Modal
     const reader = new FileReader();
     reader.onload = () => {
       $("imageToCrop").src = reader.result;
-      $("cropperOverlay").classList.add("open"); // using existing css class for modal
-      
+      $("cropperOverlay").classList.add("open");
       if(cropper) cropper.destroy();
-      cropper = new Cropper($("imageToCrop"), {
-        viewMode: 1,
-      });
+      cropper = new Cropper($("imageToCrop"), { viewMode: 1 });
     };
     reader.readAsDataURL(file);
-    e.target.value = ""; // reset
+    e.target.value = "";
   });
 
-  // 2. Scan Button
   $("btnScanText").addEventListener("click", async () => {
     if(!cropper) return;
     $("ocrStatus").textContent = t("status_scanning");
-    
     const canvas = cropper.getCroppedCanvas();
     const dataUrl = canvas.toDataURL("image/png");
-    
     try {
-      const { data: { text } } = await Tesseract.recognize(dataUrl, 'eng'); // using english engine for broad support
+      const { data: { text } } = await Tesseract.recognize(dataUrl, 'eng');
       $("quoteText").value = text.replace(/\n/g, " ").trim();
       $("cropperOverlay").classList.remove("open");
       $("ocrStatus").textContent = "";
     } catch (err) {
       alert(t("alert_ocr_error"));
-      $("ocrStatus").textContent = "Error.";
     }
   });
 
-  // 3. Cancel
-  $("btnCancelCrop").addEventListener("click", ()=>{
-    $("cropperOverlay").classList.remove("open");
+  $("btnCancelCrop").addEventListener("click", ()=>{ $("cropperOverlay").classList.remove("open"); });
+
+  $("quoteBookSelect").addEventListener("change", (e)=>{
+     const bId = e.target.value;
+     if(bId && state.books[bId]){
+       $("quoteAuthor").value = state.books[bId].author || "";
+       $("quoteBookTitle").value = state.books[bId].title || "";
+     }
   });
 
-  // Save Quote
   $("addQuote").addEventListener("click", ()=>{
     const text = $("quoteText").value.trim();
     if(!text) return;
     state.quotes.push({
       id: uid(),
-      bookId: state.activeBookId,
+      bookId: $("quoteBookSelect").value || state.activeBookId, // use selected or active
       text,
       author: $("quoteAuthor").value,
+      bookTitle: $("quoteBookTitle").value,
       page: $("quotePage").value
     });
     $("quoteText").value = "";
     save(); renderAll();
   });
+  
+  $("btnGenStory").addEventListener("click", ()=> generateQuoteImage("story"));
+  $("btnGenPost").addEventListener("click", ()=> generateQuoteImage("post"));
+}
+
+function renderQuotes(){
+  // Group by Book
+  const container = $("quotesListContainer");
+  container.innerHTML = "";
+  
+  // Get unique book IDs from quotes or active books?
+  // Let's iterate all books that have quotes + misc quotes
+  const quotesByBook = {};
+  state.quotes.forEach(q => {
+    const key = q.bookTitle || "Unknown Book";
+    if(!quotesByBook[key]) quotesByBook[key] = [];
+    quotesByBook[key].push(q);
+  });
+
+  Object.keys(quotesByBook).forEach(title => {
+    const wrapper = document.createElement("details");
+    wrapper.className = "item";
+    const summary = document.createElement("summary");
+    summary.textContent = `📖 ${title} (${quotesByBook[title].length})`;
+    wrapper.appendChild(summary);
+    
+    quotesByBook[title].forEach(q => {
+      const d = document.createElement("div");
+      d.style.padding = "10px";
+      d.style.borderTop = "1px solid #333";
+      d.innerHTML = `
+        <div style="font-style:italic">"${q.text}"</div>
+        <div class="small muted">— ${q.author || "?"}, p.${q.page||"?"}</div>
+        <button class="btn small-btn" style="margin-top:5px">Select to Gen Image</button>
+      `;
+      d.querySelector("button").onclick = () => {
+         lastSelectedQuote = q;
+         $("quoteGenActions").style.display = "flex";
+         // highlight
+         document.querySelectorAll(".item div").forEach(x=>x.style.background="transparent");
+         d.style.background = "rgba(255,255,255,0.05)";
+      };
+      wrapper.appendChild(d);
+    });
+    container.appendChild(wrapper);
+  });
+}
+
+function generateQuoteImage(format){
+  if(!lastSelectedQuote) return;
+  const q = lastSelectedQuote;
+  const cvs = $("quoteGenCanvas");
+  const ctx = cvs.getContext("2d");
+  
+  // Sizes
+  const W = 1080;
+  const H = format === "story" ? 1920 : 1080;
+  cvs.width = W; cvs.height = H;
+  
+  // Bg
+  ctx.fillStyle = "#121212";
+  ctx.fillRect(0,0,W,H);
+  
+  // Text
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  
+  // Wrap text logic
+  const fontSize = format === "story" ? 60 : 50;
+  ctx.font = "italic " + fontSize + "px serif";
+  
+  const textX = W/2;
+  const textY = H/2 - 100;
+  const maxW = W - 140;
+  
+  wrapText(ctx, `"${q.text}"`, textX, textY, maxW, fontSize*1.3);
+  
+  // Footer
+  ctx.font = "30px sans-serif";
+  ctx.fillStyle = "#aaaaaa";
+  ctx.fillText(q.author || "", W/2, H/2 + 200);
+  ctx.font = "bold 30px sans-serif";
+  ctx.fillText(q.bookTitle || "", W/2, H/2 + 240);
+  
+  // Branding
+  ctx.font = "20px monospace";
+  ctx.fillStyle = "#555";
+  ctx.fillText("BookQuest App", W/2, H - 50);
+
+  // Trigger Download
+  const link = document.createElement('a');
+  link.download = `quote_${format}.png`;
+  link.href = cvs.toDataURL();
+  link.click();
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(' ');
+  let line = '';
+  let lines = [];
+  
+  for(let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + ' ';
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && n > 0) {
+      lines.push(line);
+      line = words[n] + ' ';
+    } else {
+      line = testLine;
+    }
+  }
+  lines.push(line);
+  
+  // Draw centered
+  let startY = y - ((lines.length-1) * lineHeight)/2;
+  for(let i=0; i<lines.length; i++){
+    ctx.fillText(lines[i], x, startY + (i*lineHeight));
+  }
+}
+
+// ---------- Render Logic ----------
+function renderAll(){
+  // Populate Book Selects (Active & Quote)
+  const sel = $("bookSelect");
+  const qSel = $("quoteBookSelect");
+  const ids = Object.keys(state.books);
+  
+  const opts = ids.map(id=> `<option value="${id}">${state.books[id].title}</option>`).join("");
+  sel.innerHTML = opts;
+  qSel.innerHTML = `<option value="">${t("opt_none")}</option>` + opts;
+  
+  if(state.activeBookId) sel.value = state.activeBookId;
+
+  // Active Book Data
+  const b = activeBook();
+  if(b){
+    $("editTitle").value = b.title || "";
+    $("editTotal").value = b.totalPages || 0;
+    $("editCurrent").value = b.currentPage || 0;
+    $("timesReadVal").textContent = b.timesRead || 0;
+    
+    // Check finished
+    const isFinished = b.totalPages && b.currentPage >= b.totalPages;
+    $("markUnread").style.display = isFinished ? "inline-block" : "none";
+    $("rereadBook").style.display = isFinished ? "inline-block" : "none";
+    
+    const pct = b.totalPages ? Math.round((b.currentPage/b.totalPages)*100) : 0;
+    $("progress").textContent = `${b.currentPage}/${b.totalPages} (${pct}%)`;
+    
+    // Pace
+    const sessions = state.sessions.filter(s=>s.bookId === b.id);
+    let p=0, m=0;
+    sessions.slice(-10).forEach(s=>{ p+=s.pages||0; m+=s.mins||0; });
+    const pace = m? p/m : 0;
+    $("pace").textContent = pace.toFixed(2) + " p/min";
+    
+    // ETA
+    if(isFinished) $("eta").textContent = "Done";
+    else if(pace>0) $("eta").textContent = ((b.totalPages-b.currentPage)/pace/60).toFixed(1) + "h";
+    else $("eta").textContent = "—";
+  }
+
+  renderQuotes();
+  
+  // History & Version
+  const hist = [...state.sessions].slice(-25).reverse();
+  $("history").innerHTML = hist.map(s=>{
+     return `<div class="item"><b>${(s.endISO||"").slice(0,10)}</b> <span class="muted">${s.mins}m</span></div>`;
+  }).join("");
+  
+  $("buildVersion").textContent = BUILD_VERSION;
 }
 
 // ---------- Drive Sync ----------
 function driveTokenClient(){
-  // Use Hardcoded ID
   const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
   if(!window.google) return null;
   return google.accounts.oauth2.initTokenClient({
@@ -404,49 +517,52 @@ function driveTokenClient(){
     }
   });
 }
-
 let _tokenClient = null;
 function driveSignIn(){
   if(!_tokenClient) _tokenClient = driveTokenClient();
   if(_tokenClient) _tokenClient.requestAccessToken({prompt: "consent"});
 }
 
-// (Reuse existing drivePull/drivePush logic but removed ID check)
-// [Assuming standard Drive logic persists, omitted for brevity but connected in bind()]
-
 // ---------- Init ----------
 function bind(){
-  $("langToggle").addEventListener("click", toggleLanguage);
+  $("langEn").addEventListener("click", ()=>setLanguage("en"));
+  $("langEs").addEventListener("click", ()=>setLanguage("es"));
+  
   $("addBook").addEventListener("click", addBook);
   $("saveBook").addEventListener("click", saveBook);
   $("deleteBook").addEventListener("click", deleteBook);
+  $("markUnread").addEventListener("click", markUnread);
+  $("rereadBook").addEventListener("click", rereadBook);
+  
   $("start").addEventListener("click", startTimer);
-  $("pause").addEventListener("click", togglePause);
+  $("pause").addEventListener("click", ()=>togglePause(false));
   $("finish").addEventListener("click", finishSession);
   
-  // Tabs
+  // Tab Switching Logic
   document.querySelectorAll(".tabbtn").forEach(btn => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".tabbtn").forEach(b => b.classList.remove("active"));
       document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
       btn.classList.add("active");
-      $( "tab-" + btn.dataset.tab ).classList.add("active");
+      const target = btn.dataset.tab;
+      $( "tab-" + target ).classList.add("active");
+      
+      // Auto-pause if going to quotes
+      if(target === "quotes" && state.timer.running){
+        togglePause(true); // force pause
+      }
     });
   });
 
   $("driveSignIn").addEventListener("click", driveSignIn);
-  // Re-attach pull/push if needed or import from old code
-  
   setupOCR();
 }
 
-// Setup
 load();
 ensureDefaultBook();
 bind();
 updateLanguageUI();
 
-// Register CORRECT SW
 if("serviceWorker" in navigator){
   navigator.serviceWorker.register("./sw.js");
 }
