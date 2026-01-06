@@ -1,9 +1,9 @@
 const $ = (id) => document.getElementById(id);
 
 // Config
-const STORAGE_KEY = "bookquest_state_v8"; // Version bumped to reset/clean state if needed
+const STORAGE_KEY = "bookquest_state_v9"; // Version bumped
 const DRIVE_FILENAME = "bookquest_state.json";
-const BUILD_VERSION = "Build v1.4.0-lang-fix"; 
+const BUILD_VERSION = "Build v1.5.0-sync-fix"; 
 const GOOGLE_CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
 
 // I18N Dictionary
@@ -18,7 +18,8 @@ const TRANSLATIONS = {
     lbl_change_cover: "Change Cover", lbl_times_read: "Times Read", lbl_rating: "Rating (0-5)", lbl_author: "Author",
     lbl_mode: "Mode", btn_start: "Start", btn_pause: "Pause", btn_hyper: "Keep going",
     title_locked: "Next Up (Locked)", title_unlocked: "Unlocked",
-    status_autopull: "Syncing...", status_saved: "Saved ✅", status_loaded: "Loaded ✅", status_token_exp: "Refresh...",
+    status_autopull: "Syncing...", status_saved: "Saved", status_loaded: "Loaded", status_token_exp: "Refreshing Token...",
+    status_reconnected: "Reconnected ✅", status_error: "Sync Error ❌",
     share_opt_progress: "Current Progress", share_opt_finish: "Book Finished", 
     share_opt_year: "Yearly Report", share_opt_semester: "6-Month Report", share_opt_quarter: "3-Month Report",
     lbl_pages_read: "Pages Read", lbl_time_ded: "Time Dedicated", lbl_books_fin: "Books Finished", lbl_this_period: "This Period", lbl_hours: "HOURS", lbl_pages: "PAGES", lbl_books: "BOOKS",
@@ -34,7 +35,8 @@ const TRANSLATIONS = {
     lbl_change_cover: "Cambiar Portada", lbl_times_read: "Veces Leído", lbl_rating: "Calificación (0-5)", lbl_author: "Autor",
     lbl_mode: "Modo", btn_start: "Comenzar", btn_pause: "Pausa", btn_hyper: "Seguir (Hyperfocus)",
     title_locked: "Siguientes (Bloqueados)", title_unlocked: "Desbloqueados",
-    status_autopull: "Sincronizando...", status_saved: "Guardado ✅", status_loaded: "Cargado ✅", status_token_exp: "Refrescando...",
+    status_autopull: "Sincronizando...", status_saved: "Guardado", status_loaded: "Cargado", status_token_exp: "Refrescando...",
+    status_reconnected: "Reconectado ✅", status_error: "Error Sync ❌",
     share_opt_progress: "Progreso Actual", share_opt_finish: "Libro Terminado", 
     share_opt_year: "Reporte Anual", share_opt_semester: "Reporte Semestral", share_opt_quarter: "Reporte Trimestral",
     lbl_pages_read: "Páginas Leídas", lbl_time_ded: "Tiempo Dedicado", lbl_books_fin: "Libros Terminados", lbl_this_period: "Este Periodo", lbl_hours: "HORAS", lbl_pages: "PÁGINAS", lbl_books: "LIBROS",
@@ -42,7 +44,7 @@ const TRANSLATIONS = {
   }
 };
 
-let currentLang = "en"; // Default is now English
+let currentLang = "en"; 
 
 // ---------- State ----------
 const state = {
@@ -54,6 +56,7 @@ const state = {
   quotes: [] 
 };
 let autoSaveInterval = null;
+let isLoginAction = false; // Flag to distinguish manual login vs auto-refresh
 
 // Helpers
 function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
@@ -90,7 +93,6 @@ function setLanguage(lang){ currentLang = lang; updateLanguageUI(); }
 function ensureDefaultBook(){
   if(Object.keys(state.books).length > 0) return;
   const id = uid();
-  // Default title in English now
   state.books[id] = { id, title:"My First Book", totalPages:300, currentPage:0, createdAt:new Date().toISOString(), isPlaceholder: true };
   state.activeBookId = id;
 }
@@ -408,7 +410,6 @@ function addBook(){
   const bookIds = Object.keys(state.books);
   if(bookIds.length === 1) {
       const existing = state.books[bookIds[0]];
-      // Delete if marked as placeholder OR matches known default names (legacy fix)
       if(existing.isPlaceholder || existing.title === "Mi Primer Libro" || existing.title === "My First Book"){
           delete state.books[bookIds[0]];
       }
@@ -559,7 +560,7 @@ function renderAll(){
 
     renderActiveBookCard(b);
     
-    // Simple Range Stats (still useful for Dashboard)
+    // Simple Range Stats
     const d = rangeDays();
     const totalPages = state.sessions.filter(s=>inRange(s.endISO||s.startISO, d)).reduce((a,x)=>a+(x.pages||0),0);
     const totalMins = state.sessions.filter(s=>inRange(s.endISO||s.startISO, d)).reduce((a,x)=>a+(x.mins||0),0);
@@ -574,7 +575,7 @@ function renderAll(){
   $("buildVersion").textContent = BUILD_VERSION;
 }
 
-// ---------- Drive Sync ----------
+// ---------- Drive Sync (FIXED) ----------
 function driveTokenClient(){
   const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
   if(!window.google) return null;
@@ -583,21 +584,39 @@ function driveTokenClient(){
     callback: (resp) => {
       if(resp.access_token){
         state.drive.token = resp.access_token;
-        $("driveStatus").textContent = t("status_autopull");
-        save();
-        drivePull().then(() => { if(autoSaveInterval) clearInterval(autoSaveInterval); autoSaveInterval = setInterval(drivePush, 60000); });
+        
+        // LOGIC SPLIT:
+        if(isLoginAction) {
+            // Case 1: Manual Click -> PULL
+            $("driveStatus").textContent = t("status_autopull");
+            drivePull().then(() => {
+                if(autoSaveInterval) clearInterval(autoSaveInterval);
+                autoSaveInterval = setInterval(drivePush, 60000);
+            });
+            isLoginAction = false;
+        } else {
+            // Case 2: Auto Refresh -> PUSH ONLY (Do not overwrite)
+            $("driveStatus").textContent = t("status_reconnected");
+            drivePush(); 
+        }
       }
     }
   });
 }
 
 let _tokenClient = null;
-function driveSignIn(){ if(!_tokenClient) _tokenClient = driveTokenClient(); if(_tokenClient) _tokenClient.requestAccessToken({prompt: ""}); }
+function driveSignIn(){ 
+    isLoginAction = true; // Set flag
+    if(!_tokenClient) _tokenClient = driveTokenClient(); 
+    if(_tokenClient) _tokenClient.requestAccessToken({prompt: "consent"}); 
+}
 
 // Handle 401 Expiration
 async function handleDriveError(res){
     if(res.status === 401){
         $("driveStatus").textContent = t("status_token_exp");
+        isLoginAction = false; // Ensure we don't Pull on refresh
+        // Silent refresh
         if(_tokenClient) _tokenClient.requestAccessToken({prompt: ""});
         return true; 
     }
@@ -625,8 +644,13 @@ async function drivePull(){
     const data = await res.json();
     Object.assign(state, data); state.drive.fileId = fileId; state.drive.lastSyncISO = new Date().toISOString();
     ensureDefaultBook(); save(); renderAll();
-    $("driveStatus").textContent = `${t("status_loaded")} (${new Date().toLocaleTimeString()})`;
-  }catch(e){ console.log(e); }
+    // FORCE UPDATE UI
+    const time = new Date().toLocaleTimeString();
+    $("driveStatus").textContent = `${t("status_loaded")} (${time})`;
+  }catch(e){ 
+     console.log(e); 
+     $("driveStatus").textContent = t("status_error");
+  }
 }
 async function drivePush(){
   try{
@@ -647,8 +671,13 @@ async function drivePush(){
       if(!res.ok) throw new Error("Update failed");
     }
     state.drive.lastSyncISO = new Date().toISOString(); save();
-    $("driveStatus").textContent = `${t("status_saved")} (${new Date().toLocaleTimeString()})`;
-  }catch(e){ console.log(e); }
+    // FORCE UPDATE UI
+    const time = new Date().toLocaleTimeString();
+    $("driveStatus").textContent = `${t("status_saved")} (${time})`;
+  }catch(e){ 
+      console.log(e); 
+      $("driveStatus").textContent = t("status_error");
+  }
 }
 
 // ---------- Init ----------
