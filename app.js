@@ -1,73 +1,21 @@
 const $ = (id) => document.getElementById(id);
 
-// Config
-const STORAGE_KEY = "bookquest_state_v9"; // Version bumped
+const STORAGE_KEY = "bookquest_state_v2";
 const DRIVE_FILENAME = "bookquest_state.json";
-const BUILD_VERSION = "Build v1.5.0-sync-fix"; 
-const GOOGLE_CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
-
-// I18N Dictionary
-const TRANSLATIONS = {
-  en: {
-    nav_dashboard: "Dashboard", nav_books: "Books", nav_session: "Session", nav_achievements: "Achievements", nav_quotes: "Quotes", nav_settings: "Settings",
-    dash_title: "Dashboard", lbl_stats_range: "Range",
-    opt_7days: "7 days", opt_30days: "30 days", opt_1year: "1 year", opt_alltime: "All time",
-    btn_gen_story: "Share / Create Image", 
-    title_active_book: "Active book", btn_mark_finish: "Mark finished",
-    sum_edit_book: "Edit active book", btn_save: "Save Changes", btn_delete: "Delete book", 
-    lbl_change_cover: "Change Cover", lbl_times_read: "Times Read", lbl_rating: "Rating (0-5)", lbl_author: "Author",
-    lbl_mode: "Mode", btn_start: "Start", btn_pause: "Pause", btn_hyper: "Keep going",
-    title_locked: "Next Up (Locked)", title_unlocked: "Unlocked",
-    status_autopull: "Syncing...", status_saved: "Saved", status_loaded: "Loaded", status_token_exp: "Refreshing Token...",
-    status_reconnected: "Reconnected ✅", status_error: "Sync Error ❌",
-    share_opt_progress: "Current Progress", share_opt_finish: "Book Finished", 
-    share_opt_year: "Yearly Report", share_opt_semester: "6-Month Report", share_opt_quarter: "3-Month Report",
-    lbl_pages_read: "Pages Read", lbl_time_ded: "Time Dedicated", lbl_books_fin: "Books Finished", lbl_this_period: "This Period", lbl_hours: "HOURS", lbl_pages: "PAGES", lbl_books: "BOOKS",
-    alert_pages_req: "Please enter total pages."
-  },
-  es: {
-    nav_dashboard: "Tablero", nav_books: "Libros", nav_session: "Sesión", nav_achievements: "Logros", nav_quotes: "Citas", nav_settings: "Ajustes",
-    dash_title: "Tablero", lbl_stats_range: "Rango",
-    opt_7days: "7 días", opt_30days: "30 días", opt_1year: "1 año", opt_alltime: "Todo el tiempo",
-    btn_gen_story: "Compartir / Crear Imagen", 
-    title_active_book: "Libro activo", btn_mark_finish: "Marcar terminado",
-    sum_edit_book: "Editar libro activo", btn_save: "Guardar Cambios", btn_delete: "Borrar libro", 
-    lbl_change_cover: "Cambiar Portada", lbl_times_read: "Veces Leído", lbl_rating: "Calificación (0-5)", lbl_author: "Autor",
-    lbl_mode: "Modo", btn_start: "Comenzar", btn_pause: "Pausa", btn_hyper: "Seguir (Hyperfocus)",
-    title_locked: "Siguientes (Bloqueados)", title_unlocked: "Desbloqueados",
-    status_autopull: "Sincronizando...", status_saved: "Guardado", status_loaded: "Cargado", status_token_exp: "Refrescando...",
-    status_reconnected: "Reconectado ✅", status_error: "Error Sync ❌",
-    share_opt_progress: "Progreso Actual", share_opt_finish: "Libro Terminado", 
-    share_opt_year: "Reporte Anual", share_opt_semester: "Reporte Semestral", share_opt_quarter: "Reporte Trimestral",
-    lbl_pages_read: "Páginas Leídas", lbl_time_ded: "Tiempo Dedicado", lbl_books_fin: "Libros Terminados", lbl_this_period: "Este Periodo", lbl_hours: "HORAS", lbl_pages: "PÁGINAS", lbl_books: "LIBROS",
-    alert_pages_req: "Por favor pon el total de páginas."
-  }
-};
-
-let currentLang = "en"; 
 
 // ---------- State ----------
 const state = {
-  books: {},           
+  books: {},           // id -> {id,title,totalPages,currentPage,createdAt}
   activeBookId: null,
-  sessions: [],        
+  sessions: [],        // {id,bookId,startISO,endISO,mins,pages}
   timer: { running:false, mode:"sprint", sprintMins:8, startMs:0, elapsedMs:0, intervalId:null, bell:false, paused:false },
   drive: { token:null, fileId:null, lastSyncISO:null },
-  quotes: [] 
 };
-let autoSaveInterval = null;
-let isLoginAction = false; // Flag to distinguish manual login vs auto-refresh
 
-// Helpers
 function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
-function t(key){ return TRANSLATIONS[currentLang][key] || key; }
-function rangeDays(){ return Number($("rangeSelect").value || 30); }
-function inRange(iso, days){
-  const d = new Date(iso);
-  const now = new Date();
-  const ms = days * 24 * 3600 * 1000;
-  return (now - d) <= ms;
-}
+function todayKey(d=new Date()){ return d.toISOString().slice(0,10); }
+function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
+function fmt(n){ return Number.isFinite(n) ? n : 0; }
 
 function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 function load(){
@@ -76,24 +24,19 @@ function load(){
   try{
     const data = JSON.parse(raw);
     Object.assign(state, data);
-    if(!state.quotes) state.quotes = [];
   }catch(_){}
 }
 
-function updateLanguageUI(){
-  document.querySelectorAll("[data-i18n]").forEach(el => {
-    const key = el.getAttribute("data-i18n");
-    if(TRANSLATIONS[currentLang][key]) el.textContent = TRANSLATIONS[currentLang][key];
-  });
-  renderAll();
-}
-
-function setLanguage(lang){ currentLang = lang; updateLanguageUI(); }
-
 function ensureDefaultBook(){
-  if(Object.keys(state.books).length > 0) return;
+  if(state.activeBookId && state.books[state.activeBookId]) return;
+  const ids = Object.keys(state.books);
+  if(ids.length){
+    state.activeBookId = ids[0];
+    return;
+  }
+  // create a placeholder book
   const id = uid();
-  state.books[id] = { id, title:"My First Book", totalPages:300, currentPage:0, createdAt:new Date().toISOString(), isPlaceholder: true };
+  state.books[id] = { id, title:"Mi libro", totalPages:300, currentPage:0, createdAt:new Date().toISOString() };
   state.activeBookId = id;
 }
 
@@ -106,6 +49,7 @@ function formatMMSS(ms){
   const ss = String(s%60).padStart(2,"0");
   return `${String(m).padStart(2,"0")}:${ss}`;
 }
+
 function beep(){
   try{
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -127,605 +71,592 @@ function startTimer(){
   state.timer.elapsedMs = 0;
   state.timer.bell = false;
   state.timer.paused = false;
-  updateTimerUI();
+
+  $("start").disabled = true;
+  $("pause").disabled = false;
+  $("finish").disabled = false;
+  $("hyper").disabled = true;
 
   const tick = () => {
     if(!state.timer.running || state.timer.paused) return;
     state.timer.elapsedMs = Date.now() - state.timer.startMs;
+
     if(state.timer.mode === "sprint"){
       const target = state.timer.sprintMins * 60 * 1000;
       const remaining = target - state.timer.elapsedMs;
+
       if(remaining <= 0 && !state.timer.bell){
         state.timer.bell = true;
         beep();
-        $("timerHint").textContent = t("hint_sprint_done") || "Sprint Done ✅";
+        $("timerHint").textContent = "Sprint completo ✅ Puedes seguir (hyperfocus).";
         $("hyper").disabled = false;
       }
-      if(!state.timer.bell) $("timerBig").textContent = formatMMSS(remaining);
-      else $("timerBig").textContent = "+" + formatMMSS(-remaining);
+      if(!state.timer.bell){
+        $("timerBig").textContent = formatMMSS(remaining);
+        $("timerHint").textContent = "Sólo empieza. Al final decides.";
+      }else{
+        $("timerBig").textContent = "+" + formatMMSS(-remaining);
+      }
     }else{
       $("timerBig").textContent = formatMMSS(state.timer.elapsedMs);
-      $("timerHint").textContent = "Flow 🔥";
+      $("timerHint").textContent = "Flow: sin límite. Tú mandas.";
     }
   };
+
   tick();
   state.timer.intervalId = setInterval(tick, 250);
   save();
 }
 
-function hyperfocus(){
+function togglePause(){
   if(!state.timer.running) return;
-  state.timer.mode = "flow";
-  state.timer.bell = true; 
-  $("mode").value = "open"; 
-  $("hyper").disabled = true;
-  $("timerHint").textContent = "Hyperfocus 🔥";
+  state.timer.paused = !state.timer.paused;
+  if(state.timer.paused){
+    $("pause").textContent = "Reanudar";
+    $("timerHint").textContent = "En pausa.";
+  }else{
+    // rebase startMs so elapsed continues correctly
+    state.timer.startMs = Date.now() - state.timer.elapsedMs;
+    $("pause").textContent = "Pausa";
+  }
   save();
 }
 
-function updateTimerUI(){
-  $("start").disabled = state.timer.running;
-  $("pause").disabled = !state.timer.running;
-  $("finish").disabled = !state.timer.running;
-  $("pause").textContent = state.timer.paused ? "Resume" : t("btn_pause");
-}
-
-function togglePause(forcePause = false){
-  if(!state.timer.running) return;
-  if(forcePause){
-     if(!state.timer.paused){
-       state.timer.paused = true;
-       $("pause").textContent = "Resume";
-       $("timerHint").textContent = "Paused";
-     }
-     save(); return;
-  }
-  state.timer.paused = !state.timer.paused;
-  if(state.timer.paused){
-    $("pause").textContent = "Resume";
-    $("timerHint").textContent = "Paused";
-  }else{
-    state.timer.startMs = Date.now() - state.timer.elapsedMs;
-    $("pause").textContent = t("btn_pause");
-  }
+function hyperfocus(){
+  state.timer.mode = "flow";
+  $("mode").value = "flow";
+  $("hyper").disabled = true;
+  $("timerHint").textContent = "Hyperfocus 🔥 Sigue. Cierra sesión cuando quieras.";
   save();
 }
 
 function finishSession(){
   if(!state.timer.running) return;
+
+  // stop
   state.timer.running = false;
   state.timer.paused = false;
-  if(state.timer.intervalId) clearInterval(state.timer.intervalId);
-  updateTimerUI();
+  if(state.timer.intervalId){
+    clearInterval(state.timer.intervalId);
+    state.timer.intervalId = null;
+  }
+
+  $("start").disabled = false;
+  $("pause").disabled = true;
+  $("finish").disabled = true;
   $("hyper").disabled = true;
+  $("pause").textContent = "Pausa";
 
   const book = activeBook();
   const endISO = new Date().toISOString();
   const startISO = new Date(state.timer.startMs).toISOString();
   const mins = Math.max(1, Math.round(state.timer.elapsedMs / 60000));
-  const pages = Number($("pagesRead").value || 0);
 
+  const pages = Number($("pagesRead").value || 0);
+  // Update current page (assuming "sin blancas" consistently)
   if(Number.isFinite(pages) && pages > 0){
     book.currentPage = Math.min(book.totalPages, (book.currentPage || 0) + pages);
   }
+
   state.sessions.push({ id: uid(), bookId: book.id, startISO, endISO, mins, pages: Math.max(0, pages) });
 
   $("pagesRead").value = "";
   $("timerBig").textContent = "GG";
-  save(); renderAll();
+  $("timerHint").textContent = "Sesión guardada ✅ ¿Otra mini-sesión?";
+  save();
+  renderAll();
 }
 
-// ---------- Achievements ----------
-const ACHIEVEMENTS = [
-  {id:"first", emoji:"🌱", title:"First Step", desc:"Finish 1 session", check:()=>state.sessions.length >= 1},
-  {id:"streak3", emoji:"🔥", title:"On Fire", desc:"3 day streak", check:()=>{
-     const days = [...new Set(state.sessions.map(s=>(s.endISO||"").slice(0,10)))].sort();
-     return days.length >= 3; 
-  }},
-  {id:"reader", emoji:"🐛", title:"Bookworm", desc:"Read 100 pages", check:()=>state.sessions.reduce((a,b)=>a+(b.pages||0),0) >= 100},
-  {id:"finish1", emoji:"🏆", title:"Finisher", desc:"Finish a book", check:()=>{
-     return Object.values(state.books).some(b=> b.totalPages && b.currentPage >= b.totalPages);
-  }},
-  {id:"expert", emoji:"🎓", title:"Expert", desc:"Read 1000 pages", check:()=>state.sessions.reduce((a,b)=>a+(b.pages||0),0) >= 1000}
-];
+// ---------- Stats / ETA ----------
+function sessionsForBook(bookId){
+  return state.sessions.filter(s => s.bookId === bookId);
+}
 
-function checkAchievements(){
-  const unlocked = ACHIEVEMENTS.filter(a => a.check());
-  const locked = ACHIEVEMENTS.filter(a => !a.check());
-  
-  // Render Unlocked
-  $("achUnlockedList").innerHTML = unlocked.map(a => `
-       <div class="item" style="border-left: 3px solid #4caf50;">
-          <div style="font-size:24px; float:left; margin-right:10px">${a.emoji}</div>
-          <div class="itemTitle">${a.title}</div>
-          <div class="small muted">${a.desc}</div>
-       </div>`).join("") || "<div class='notice'>Keep reading to unlock.</div>";
-
-  // Render Locked (create container if missing)
-  let lockCont = $("achNextList");
-  if(!lockCont){
-      const h2 = document.createElement("h2");
-      h2.textContent = t("title_locked");
-      h2.id = "lbl_locked_ach";
-      lockCont = document.createElement("div");
-      lockCont.id = "achNextList";
-      lockCont.className = "list";
-      const section = $("achUnlockedList").parentNode;
-      section.appendChild(document.createElement("hr"));
-      section.appendChild(h2);
-      section.appendChild(lockCont);
-  } else {
-      const h2 = document.getElementById("lbl_locked_ach");
-      if(h2) h2.textContent = t("title_locked");
+// weighted average pace using last N sessions with pages>0
+function averagePace(bookId, N=10){
+  const arr = sessionsForBook(bookId).filter(s => (s.pages||0) > 0 && (s.mins||0) > 0);
+  if(!arr.length) return 0;
+  const last = arr.slice(-N);
+  // exponential weights (recent heavier)
+  let wSum = 0, pSum = 0;
+  for(let i=0;i<last.length;i++){
+    const s = last[i];
+    const w = Math.pow(1.18, i); // increasing
+    wSum += w;
+    pSum += w * (s.pages / s.mins);
   }
-
-  lockCont.innerHTML = locked.slice(0,3).map(a => `
-       <div class="item" style="opacity:0.5; border:1px dashed #444">
-          <div style="font-size:24px; float:left; margin-right:10px">🔒</div>
-          <div class="itemTitle">${a.title}</div>
-          <div class="small muted">${a.desc}</div>
-       </div>`).join("");
+  return pSum / wSum;
 }
 
-// ---------- Visuals & Edit ----------
-function renderActiveBookCard(b){
-  const card = $("activeBookCard");
-  if(!b) { card.innerHTML = "<div class='notice'>No active book.</div>"; return; }
-  
-  const pct = b.totalPages ? Math.round((b.currentPage/b.totalPages)*100) : 0;
-  
-  card.innerHTML = `
-    <div style="display:flex; gap:15px; align-items:flex-start; width:100%">
-      <div style="width:80px; height:120px; background:#222; border:1px solid #444; display:flex; align-items:center; justify-content:center; border-radius:8px; color:#555; text-align:center; font-size:10px; overflow:hidden">
-         ${b.coverData ? `<img src="${b.coverData}" style="width:100%; height:100%; object-fit:cover" />` : "NO COVER"}
-      </div>
-      <div style="flex:1">
-         <h3 style="margin:0; font-size:18px">${b.title}</h3>
-         <div class="small muted" style="margin-bottom:8px">${b.author || "Unknown"}</div>
-         <div class="small">Page ${b.currentPage} / ${b.totalPages}</div>
-         <div style="background:#222; height:6px; border-radius:3px; margin-top:6px; overflow:hidden">
-            <div style="width:${pct}%; background:#fff; height:100%"></div>
-         </div>
-         <div class="small muted" style="margin-top:4px">${pct}% Completed</div>
-      </div>
-    </div>
-  `;
+function computeETA(bookId){
+  const b = state.books[bookId];
+  if(!b || !b.totalPages) return "—";
+  const remaining = Math.max(0, (b.totalPages||0) - (b.currentPage||0));
+  if(remaining === 0) return "Terminado 🎉";
+  const pace = averagePace(bookId);
+  if(pace <= 0) return "Necesito 1 sesión con páginas";
+  const mins = remaining / pace;
+  const hours = mins / 60;
+  if(hours < 2) return `~${Math.round(mins)} min`;
+  if(hours < 24) return `~${hours.toFixed(1)} h`;
+  return `~${(hours/24).toFixed(1)} días`;
 }
 
-// ---------- Share Logic ----------
-function showShareOptions(){
-    const opts = `
-      <div style="display:flex; flex-direction:column; gap:10px">
-        <button class="btn" onclick="generateShareImage('progress')">${t("share_opt_progress")}</button>
-        <button class="btn" onclick="generateShareImage('finish')">${t("share_opt_finish")}</button>
-        <hr class="sep" style="width:100%"/>
-        <button class="btn" onclick="generateShareImage('stats_quarter')">${t("share_opt_quarter")}</button>
-        <button class="btn" onclick="generateShareImage('stats_semester')">${t("share_opt_semester")}</button>
-        <button class="btn" onclick="generateShareImage('stats_year')">${t("share_opt_year")}</button>
+function rangeDays(){
+  return Number($("rangeSelect").value || 30);
+}
+
+function inRange(iso, days){
+  const d = new Date(iso);
+  const now = new Date();
+  const ms = days * 24 * 3600 * 1000;
+  return (now - d) <= ms;
+}
+
+function aggregateDaily(bookId, days){
+  // returns arrays: labels (YYYY-MM-DD), pagesByDay, minsByDay
+  const map = new Map(); // day -> {pages,mins}
+  for(const s of state.sessions){
+    if(s.bookId !== bookId) continue;
+    if(!inRange(s.endISO || s.startISO, days)) continue;
+    const day = (s.endISO || s.startISO).slice(0,10);
+    const cur = map.get(day) || {pages:0, mins:0};
+    cur.pages += (s.pages||0);
+    cur.mins += (s.mins||0);
+    map.set(day, cur);
+  }
+  // build continuous days list from oldest->today
+  const labels = [];
+  const pagesArr = [];
+  const minsArr = [];
+
+  const now = new Date();
+  for(let i=days-1;i>=0;i--){
+    const dt = new Date(now.getTime() - i*24*3600*1000);
+    const key = dt.toISOString().slice(0,10);
+    const v = map.get(key) || {pages:0, mins:0};
+    labels.push(key.slice(5)); // MM-DD
+    pagesArr.push(v.pages);
+    minsArr.push(v.mins);
+  }
+  return {labels, pagesArr, minsArr};
+}
+
+function aggregateGlobal(days){
+  let pages=0, mins=0;
+  for(const s of state.sessions){
+    if(!inRange(s.endISO || s.startISO, days)) continue;
+    pages += (s.pages||0);
+    mins += (s.mins||0);
+  }
+  return {pages, mins};
+}
+
+// ---------- Charts (simple bar charts, offline-friendly) ----------
+function drawBarChart(canvas, labels, values){
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // background
+  ctx.fillStyle = "#0c0c0d";
+  ctx.fillRect(0,0,W,H);
+
+  const maxV = Math.max(1, ...values);
+  const padL = 40, padR = 10, padT = 10, padB = 28;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  // axes
+  ctx.strokeStyle = "#2a2b2e";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT);
+  ctx.lineTo(padL, padT+plotH);
+  ctx.lineTo(padL+plotW, padT+plotH);
+  ctx.stroke();
+
+  // bars
+  const n = values.length;
+  const gap = 1;
+  const barW = Math.max(1, Math.floor(plotW / n) - gap);
+
+  for(let i=0;i<n;i++){
+    const v = values[i];
+    const h = Math.round((v / maxV) * plotH);
+    const x = padL + i*(barW+gap);
+    const y = padT + (plotH - h);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.globalAlpha = v === 0 ? 0.18 : 0.9;
+    ctx.fillRect(x, y, barW, h);
+  }
+  ctx.globalAlpha = 1;
+
+  // y label (max)
+  ctx.fillStyle = "#a8a8a8";
+  ctx.font = "12px system-ui";
+  ctx.fillText(String(maxV), 6, padT+12);
+
+  // x labels (sparse)
+  const step = Math.ceil(n / 6);
+  ctx.fillStyle = "#a8a8a8";
+  ctx.font = "11px system-ui";
+  for(let i=0;i<n;i+=step){
+    const x = padL + i*(barW+gap);
+    ctx.fillText(labels[i], x, padT+plotH+18);
+  }
+}
+
+function renderHistory(){
+  const hist = [...state.sessions].slice(-25).reverse();
+  $("history").innerHTML = hist.map(s=>{
+    const day = (s.endISO || s.startISO).slice(0,10);
+    const b = state.books[s.bookId];
+    const title = b ? b.title : "(libro borrado)";
+    return `
+      <div class="item">
+        <b>${day} · ${title}</b>
+        <div class="muted small">${s.mins||0} min · ${s.pages||0} pág</div>
       </div>
     `;
-    $("storyHint").innerHTML = opts; 
-    $("storyPreview").style.display = "none";
-    $("downloadStory").disabled = true;
+  }).join("") || `<div class="muted small">Aún no hay sesiones.</div>`;
 }
 
-async function generateShareImage(type){
-   const cvs = $("storyCanvas");
-   const ctx = cvs.getContext("2d");
-   const W = 1080, H = 1920;
-   cvs.width = W; cvs.height = H;
-   
-   const grd = ctx.createLinearGradient(0,0,0,H);
-   grd.addColorStop(0, "#1a1a1a"); grd.addColorStop(1, "#000000");
-   ctx.fillStyle = grd; ctx.fillRect(0,0,W,H);
-   
-   const loadImg = (src) => new Promise(r => { const i = new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; });
-
-   if(type.startsWith('stats')){
-       // REPORT
-       let days = 365;
-       if(type.includes('quarter')) days = 90;
-       if(type.includes('semester')) days = 180;
-       
-       const sessionsIn = state.sessions.filter(s=>inRange(s.endISO||s.startISO, days));
-       const pagesSess = sessionsIn.reduce((a,x)=>a+(x.pages||0),0);
-       const minsSess = sessionsIn.reduce((a,x)=>a+(x.mins||0),0);
-       const booksFin = Object.values(state.books).filter(bk=>bk.totalPages && bk.currentPage>=bk.totalPages).length;
-       
-       ctx.fillStyle = "#fff"; ctx.textAlign="center";
-       ctx.font = "bold 80px sans-serif"; ctx.fillText(t("lbl_this_period"), W/2, 200);
-       ctx.font = "40px sans-serif"; ctx.fillStyle="#aaa"; ctx.fillText(t("share_opt_"+type.split('_')[1]) || "Report", W/2, 300);
-       
-       let y = 600;
-       const drawStat = (label, val, unit) => {
-           ctx.fillStyle="#fff"; ctx.font="bold 120px monospace"; ctx.fillText(val, W/2, y);
-           ctx.fillStyle="#4caf50"; ctx.font="bold 40px sans-serif"; ctx.fillText(unit, W/2, y+60);
-           ctx.fillStyle="#888"; ctx.font="30px sans-serif"; ctx.fillText(label, W/2, y+110);
-           y += 350;
-       }
-       
-       drawStat(t("lbl_pages_read"), pagesSess, t("lbl_pages"));
-       drawStat(t("lbl_time_ded"), Math.round(minsSess/60), t("lbl_hours"));
-       drawStat(t("lbl_books_fin"), booksFin, t("lbl_books"));
-
-   } else {
-       // BOOK SPECIFIC
-       const b = activeBook();
-       if(!b) return;
-       
-       if(b.coverData){
-           const img = await loadImg(b.coverData);
-           if(img){
-               ctx.save(); ctx.globalAlpha = 0.2;
-               ctx.drawImage(img, -200, -200, W+400, H+400); 
-               ctx.restore();
-               const coverW = 600; const coverH = 900; const x = (W-coverW)/2;
-               ctx.fillStyle="rgba(0,0,0,0.5)"; ctx.fillRect(x+20, 320, coverW, coverH);
-               ctx.drawImage(img, x, 300, coverW, coverH);
-           }
-       }
-       
-       ctx.fillStyle = "#fff"; ctx.textAlign="center";
-       ctx.font = "bold 60px sans-serif";
-       ctx.fillText(b.title.substr(0,25) + (b.title.length>25?"...":""), W/2, 1350);
-       ctx.font = "italic 40px sans-serif"; ctx.fillStyle = "#ccc";
-       ctx.fillText(b.author || "Unknown", W/2, 1420);
-       
-       if(type === 'finish'){
-           const rating = b.rating || 5;
-           let stars = "⭐".repeat(rating);
-           ctx.font = "80px sans-serif"; ctx.fillText(stars, W/2, 1550);
-           ctx.fillStyle = "#4caf50"; ctx.font = "bold 50px sans-serif";
-           ctx.fillText(t("share_opt_finish").toUpperCase(), W/2, 200);
-       } else {
-           const pct = b.totalPages ? Math.round((b.currentPage/b.totalPages)*100) : 0;
-           ctx.fillStyle = "#fff"; ctx.font = "bold 100px monospace"; ctx.fillText(pct + "%", W/2, 1600);
-           ctx.fillStyle="#333"; ctx.fillRect(140, 1650, 800, 30);
-           ctx.fillStyle="#4caf50"; ctx.fillRect(140, 1650, 8 * pct, 30);
-       }
-   }
-   
-   ctx.fillStyle = "#555"; ctx.font = "30px monospace";
-   ctx.fillText("BookQuest App", W/2, H - 100);
-
-   $("storyPreview").src = cvs.toDataURL();
-   $("storyPreview").style.display = "block";
-   $("storyHint").textContent = ""; 
-   $("downloadStory").disabled = false;
-   $("downloadStory").onclick = () => {
-      const a = document.createElement("a");
-      a.download = `share_${type}.png`;
-      a.href = cvs.toDataURL();
-      a.click();
-   };
+function refreshBookSelect(){
+  const sel = $("bookSelect");
+  const ids = Object.keys(state.books);
+  sel.innerHTML = ids.map(id=>{
+    const b = state.books[id];
+    return `<option value="${id}">${b.title}</option>`;
+  }).join("");
+  sel.value = state.activeBookId;
 }
 
-// ---------- CRUD & Events ----------
+function renderActiveBook(){
+  const b = activeBook();
+  $("editTitle").value = b.title || "";
+  $("editTotal").value = b.totalPages || 0;
+  $("editCurrent").value = b.currentPage || 0;
+
+  const pct = b.totalPages ? Math.round((b.currentPage / b.totalPages) * 100) : 0;
+  $("progress").textContent = `${b.currentPage||0}/${b.totalPages||0} (${pct}%)`;
+
+  const pace = averagePace(b.id);
+  $("pace").textContent = pace > 0 ? `${pace.toFixed(2)} pág/min` : "—";
+  $("eta").textContent = computeETA(b.id);
+
+  const days = rangeDays();
+  const bookSessionsInRange = sessionsForBook(b.id).filter(s=>inRange(s.endISO||s.startISO, days));
+  $("sessionsN").textContent = String(bookSessionsInRange.length);
+
+  const agg = aggregateDaily(b.id, days);
+  drawBarChart($("chartPages"), agg.labels, agg.pagesArr);
+  drawBarChart($("chartMins"), agg.labels, agg.minsArr);
+}
+
+function renderGlobal(){
+  const days = rangeDays();
+  const {pages, mins} = aggregateGlobal(days);
+
+  const ids = Object.keys(state.books);
+  $("booksCount").textContent = String(ids.length);
+
+  let done = 0;
+  for(const id of ids){
+    const b = state.books[id];
+    if(b.totalPages && (b.currentPage || 0) >= b.totalPages) done++;
+  }
+  $("booksDone").textContent = String(done);
+  $("pagesRange").textContent = String(pages);
+  $("minsRange").textContent = String(mins);
+}
+
+function renderAll(){
+  refreshBookSelect();
+  renderActiveBook();
+  renderGlobal();
+  renderHistory();
+  save();
+}
+
+// ---------- CRUD Books ----------
 function addBook(){
-  const title = $("newTitle").value.trim() || "Untitled";
-  const total = Number($("newTotal").value);
-  if(!total){ alert(t("alert_pages_req")); return; }
-  
-  // FIX: Smarter placeholder deletion logic
-  const bookIds = Object.keys(state.books);
-  if(bookIds.length === 1) {
-      const existing = state.books[bookIds[0]];
-      if(existing.isPlaceholder || existing.title === "Mi Primer Libro" || existing.title === "My First Book"){
-          delete state.books[bookIds[0]];
-      }
+  const title = $("newTitle").value.trim() || "Sin título";
+  const totalPages = Number($("newTotal").value || 0);
+  const currentPage = Number($("newCurrent").value || 0);
+
+  if(!totalPages || totalPages < 1){
+    alert("Pon un total de páginas (sin blancas).");
+    return;
   }
 
   const id = uid();
-  const newB = { id, title, totalPages:total, currentPage: Number($("newCurrent").value||0), createdAt:new Date().toISOString(), author: $("newAuthor").value };
-  
-  const fileInput = $("newCover");
-  if(fileInput.files[0]){
-     const reader = new FileReader();
-     reader.onload = (e) => { newB.coverData = e.target.result; state.books[id] = newB; state.activeBookId = id; save(); renderAll(); };
-     reader.readAsDataURL(fileInput.files[0]);
-  } else {
-     state.books[id] = newB; state.activeBookId = id; save(); renderAll();
-  }
-  
-  $("newTitle").value=""; $("newTotal").value=""; $("newAuthor").value=""; $("newCurrent").value=""; $("newCover").value="";
+  state.books[id] = { id, title, totalPages, currentPage: clamp(currentPage,0,totalPages), createdAt:new Date().toISOString() };
+  state.activeBookId = id;
+
+  $("newTitle").value = "";
+  $("newTotal").value = "";
+  $("newCurrent").value = "";
+
+  save();
+  renderAll();
 }
 
-function saveBook(){
+function saveActiveBook(){
   const b = activeBook();
-  b.title = $("editTitle").value;
-  b.totalPages = Number($("editTotal").value);
-  b.currentPage = Number($("editCurrent").value);
-  
-  if($("editTimesRead")) b.timesRead = Number($("editTimesRead").value);
-  if($("editRating")) b.rating = Number($("editRating").value);
-  if($("editAuthor")) b.author = $("editAuthor").value;
-  
-  const f = $("editCoverBtn")?.files[0];
-  if(f){
-      const r = new FileReader();
-      r.onload = (e) => { b.coverData = e.target.result; save(); renderAll(); };
-      r.readAsDataURL(f);
-  } else {
-      save(); renderAll();
-  }
+  b.title = $("editTitle").value.trim() || b.title || "Sin título";
+  b.totalPages = Number($("editTotal").value || b.totalPages || 0);
+  b.currentPage = clamp(Number($("editCurrent").value || b.currentPage || 0), 0, b.totalPages || 0);
+  save();
+  renderAll();
 }
 
-function deleteBook(){
-  if(!confirm("Sure?")) return;
-  delete state.books[state.activeBookId];
-  ensureDefaultBook();
-  save(); renderAll();
-}
-
-function markUnread(){
+function deleteActiveBook(){
   const b = activeBook();
-  if(!b) return;
-  b.currentPage = Math.max(0, b.totalPages - 1); 
-  save(); renderAll();
-}
+  if(!confirm(`¿Eliminar "${b.title}"? (no borra sesiones, pero quedarán como “libro borrado”)`)) return;
+  delete state.books[b.id];
 
-function rereadBook(){
-  const b = activeBook();
-  if(!b) return;
-  if(!confirm("Re-read?")) return;
-  b.timesRead = (b.timesRead || 0) + 1;
-  b.currentPage = 0;
-  save(); renderAll();
-}
-
-// ---------- Render Logic ----------
-function renderAll(){
-  // Hide removed tabs
-  const hideTab = (name) => {
-      const btn = document.querySelector(`button[data-tab='${name}']`);
-      if(btn) btn.style.display = "none";
-  };
-  hideTab("stats"); hideTab("history");
-
-  const sel = $("bookSelect"); const qSel = $("quoteBookSelect");
   const ids = Object.keys(state.books);
-  const opts = ids.map(id=> `<option value="${id}">${state.books[id].title}</option>`).join("");
-  sel.innerHTML = opts; qSel.innerHTML = `<option value="">${t("opt_none")}</option>` + opts;
-  if(state.activeBookId) sel.value = state.activeBookId;
-
-  const b = activeBook();
-  if(b){
-    $("editTitle").value = b.title || "";
-    $("editTotal").value = b.totalPages || 0;
-    $("editCurrent").value = b.currentPage || 0;
-
-    // --- Inject Session Select ---
-    const sessionHeader = document.querySelector("#tab-session h2");
-    if(sessionHeader){
-        const oldSel = document.getElementById("sessionBookSel");
-        if(oldSel) oldSel.remove();
-        const div = document.createElement("div");
-        div.id = "sessionBookSel";
-        div.style.marginBottom = "15px";
-        div.innerHTML = `<select onchange="state.activeBookId=this.value; save(); renderAll();" style="width:100%">${opts}</select>`;
-        sessionHeader.parentNode.insertBefore(div, sessionHeader.nextSibling);
-        div.querySelector("select").value = state.activeBookId;
-    }
-
-    // --- Inject Edit Fields ---
-    const container = $("editCurrent").parentNode.parentNode; // formGrid
-    if(!document.getElementById("editCoverBtn")){
-        const extras = document.createElement("div");
-        extras.className = "field span2";
-        extras.style.marginTop = "10px"; extras.style.borderTop = "1px solid #333"; extras.style.paddingTop = "10px";
-        extras.innerHTML = `
-           <div class="row">
-             <div class="field">
-                <label>${t("lbl_author")}</label>
-                <input type="text" id="editAuthor">
-             </div>
-             <div class="field">
-                <label>${t("lbl_change_cover")}</label>
-                <input type="file" id="editCoverBtn" accept="image/*">
-             </div>
-             <div class="field">
-                <label>${t("lbl_times_read")}</label>
-                <input type="number" id="editTimesRead">
-             </div>
-             <div class="field">
-                <label>${t("lbl_rating")}</label>
-                <input type="number" id="editRating" min="0" max="5">
-             </div>
-           </div>
-        `;
-        const btnRow = container.querySelector(".span2:last-child");
-        container.insertBefore(extras, btnRow);
-    }
-    // Update values
-    if($("editAuthor")) $("editAuthor").value = b.author || "";
-    if($("editTimesRead")) $("editTimesRead").value = b.timesRead || 0;
-    if($("editRating")) $("editRating").value = b.rating || 0;
-
-    const isFinished = b.totalPages && b.currentPage >= b.totalPages;
-    $("markUnread").style.display = isFinished ? "inline-block" : "none";
-    $("rereadBook").style.display = isFinished ? "inline-block" : "none";
-    
-    const pct = b.totalPages ? Math.round((b.currentPage/b.totalPages)*100) : 0;
-    $("progress").textContent = `${b.currentPage}/${b.totalPages} (${pct}%)`;
-    
-    const sessions = state.sessions.filter(s=>s.bookId === b.id);
-    let p=0, m=0;
-    sessions.slice(-10).forEach(s=>{ p+=s.pages||0; m+=s.mins||0; });
-    const pace = m? p/m : 0;
-    $("pace").textContent = pace.toFixed(2) + " p/min";
-    
-    if(isFinished) $("eta").textContent = "Done";
-    else if(pace>0) $("eta").textContent = ((b.totalPages-b.currentPage)/pace/60).toFixed(1) + "h";
-    else $("eta").textContent = "—";
-
-    renderActiveBookCard(b);
-    
-    // Simple Range Stats
-    const d = rangeDays();
-    const totalPages = state.sessions.filter(s=>inRange(s.endISO||s.startISO, d)).reduce((a,x)=>a+(x.pages||0),0);
-    const totalMins = state.sessions.filter(s=>inRange(s.endISO||s.startISO, d)).reduce((a,x)=>a+(x.mins||0),0);
-    $("pagesRange").textContent = totalPages;
-    $("minsRange").textContent = totalMins;
-    $("booksCount").textContent = ids.length;
-    $("booksDone").textContent = Object.values(state.books).filter(bk=>bk.totalPages && bk.currentPage>=bk.totalPages).length;
-  }
-  
-  renderQuotes();
-  checkAchievements(); 
-  $("buildVersion").textContent = BUILD_VERSION;
+  state.activeBookId = ids[0] || null;
+  ensureDefaultBook();
+  save();
+  renderAll();
 }
 
-// ---------- Drive Sync (FIXED) ----------
+// ---------- Manual Sync ----------
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `bookquest_${todayKey()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importJSON(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(!data || typeof data !== "object") throw new Error("bad");
+      Object.assign(state, data);
+      ensureDefaultBook();
+      save();
+      renderAll();
+      alert("Importado ✅");
+    }catch(_){
+      alert("No pude importar ese JSON.");
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ---------- Drive Sync (GIS token model + Drive REST) ----------
+function setDriveUI(connected){
+  $("drivePull").disabled = !connected;
+  $("drivePush").disabled = !connected;
+  $("driveStatus").textContent = connected
+    ? "Conectado. Puedes traer/guardar."
+    : "No conectado.";
+}
+
 function driveTokenClient(){
+  // You must replace this with your OAuth Web Client ID
+  const CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
+  // appDataFolder scope for Drive application data :contentReference[oaicite:4]{index=4}
   const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
-  if(!window.google) return null;
+
+  if(!window.google || !google.accounts || !google.accounts.oauth2){
+    alert("Google Identity Services no cargó.");
+    return null;
+  }
+
   return google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID, scope: SCOPE,
+    client_id: CLIENT_ID,
+    scope: SCOPE,
     callback: (resp) => {
-      if(resp.access_token){
+      if(resp && resp.access_token){
         state.drive.token = resp.access_token;
-        
-        // LOGIC SPLIT:
-        if(isLoginAction) {
-            // Case 1: Manual Click -> PULL
-            $("driveStatus").textContent = t("status_autopull");
-            drivePull().then(() => {
-                if(autoSaveInterval) clearInterval(autoSaveInterval);
-                autoSaveInterval = setInterval(drivePush, 60000);
-            });
-            isLoginAction = false;
-        } else {
-            // Case 2: Auto Refresh -> PUSH ONLY (Do not overwrite)
-            $("driveStatus").textContent = t("status_reconnected");
-            drivePush(); 
-        }
+        save();
+        setDriveUI(true);
+        $("driveStatus").textContent = "Conectado ✅ (token activo)";
+      }else{
+        $("driveStatus").textContent = "No se obtuvo token.";
       }
     }
   });
 }
 
 let _tokenClient = null;
-function driveSignIn(){ 
-    isLoginAction = true; // Set flag
-    if(!_tokenClient) _tokenClient = driveTokenClient(); 
-    if(_tokenClient) _tokenClient.requestAccessToken({prompt: "consent"}); 
-}
 
-// Handle 401 Expiration
-async function handleDriveError(res){
-    if(res.status === 401){
-        $("driveStatus").textContent = t("status_token_exp");
-        isLoginAction = false; // Ensure we don't Pull on refresh
-        // Silent refresh
-        if(_tokenClient) _tokenClient.requestAccessToken({prompt: ""});
-        return true; 
-    }
-    return false;
+function driveSignIn(){
+  if(!_tokenClient) _tokenClient = driveTokenClient();
+  if(!_tokenClient) return;
+  _tokenClient.requestAccessToken({prompt: "consent"});
 }
 
 async function driveFindFileId(){
+  // List files in appDataFolder space :contentReference[oaicite:5]{index=5}
   const q = encodeURIComponent(`name='${DRIVE_FILENAME}'`);
-  const url = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime)`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${state.drive.token}` } });
-  if(await handleDriveError(res)) return null;
-  if(!res.ok) throw new Error("List failed");
+  const url =
+    `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime)`;
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${state.drive.token}` }
+  });
+  if(!res.ok) throw new Error("files.list failed");
   const data = await res.json();
-  return (data.files && data.files[0]) ? data.files[0].id : null;
+  const f = (data.files || [])[0];
+  return f ? f.id : null;
 }
+
 async function drivePull(){
   try{
     if(!state.drive.token) return;
+
     let fileId = state.drive.fileId || await driveFindFileId();
-    if(!fileId){ $("driveStatus").textContent = "No backup."; return; }
+    if(!fileId){
+      $("driveStatus").textContent = "No hay archivo en Drive todavía.";
+      return;
+    }
+
+    // Download file contents with alt=media :contentReference[oaicite:6]{index=6}
     const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${state.drive.token}` } });
-    if(await handleDriveError(res)) return;
-    if(!res.ok) throw new Error("DL failed");
-    const data = await res.json();
-    Object.assign(state, data); state.drive.fileId = fileId; state.drive.lastSyncISO = new Date().toISOString();
-    ensureDefaultBook(); save(); renderAll();
-    // FORCE UPDATE UI
-    const time = new Date().toLocaleTimeString();
-    $("driveStatus").textContent = `${t("status_loaded")} (${time})`;
-  }catch(e){ 
-     console.log(e); 
-     $("driveStatus").textContent = t("status_error");
+    if(!res.ok) throw new Error("files.get alt=media failed");
+    const text = await res.text();
+    const data = JSON.parse(text);
+
+    Object.assign(state, data);
+    state.drive.fileId = fileId;
+    state.drive.lastSyncISO = new Date().toISOString();
+
+    ensureDefaultBook();
+    save();
+    renderAll();
+    $("driveStatus").textContent = "Traído de Drive ✅";
+  }catch(e){
+    $("driveStatus").textContent = "Error al traer de Drive.";
   }
 }
+
 async function drivePush(){
   try{
     if(!state.drive.token) return;
+
     let fileId = state.drive.fileId || await driveFindFileId();
     const body = JSON.stringify(state);
+
     if(!fileId){
-      const boundary = "foo_bar_baz";
-      const metadata = { name: DRIVE_FILENAME, parents: ["appDataFolder"] };
-      const multipart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${body}\r\n--${boundary}--`;
-      const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id`, { method:"POST", headers: { Authorization: `Bearer ${state.drive.token}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipart });
-      if(await handleDriveError(res)) return;
-      if(!res.ok) throw new Error("Create failed");
-      const d = await res.json(); fileId = d.id; state.drive.fileId = fileId;
-    } else {
-      const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, { method: "PATCH", headers: { Authorization: `Bearer ${state.drive.token}`, "Content-Type": "application/json; charset=UTF-8" }, body });
-      if(await handleDriveError(res)) return;
-      if(!res.ok) throw new Error("Update failed");
+      // Create new file in appDataFolder using multipart upload :contentReference[oaicite:7]{index=7}
+      const boundary = "-------bookquestboundary" + Math.random().toString(16).slice(2);
+      const metadata = {
+        name: DRIVE_FILENAME,
+        parents: ["appDataFolder"]
+      };
+
+      const multipart =
+        `--${boundary}\r\n` +
+        `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+        `${JSON.stringify(metadata)}\r\n` +
+        `--${boundary}\r\n` +
+        `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+        `${body}\r\n` +
+        `--${boundary}--`;
+
+      const res = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${state.drive.token}`,
+            "Content-Type": `multipart/related; boundary=${boundary}`
+          },
+          body: multipart
+        }
+      );
+      if(!res.ok) throw new Error("create multipart failed");
+      const data = await res.json();
+      fileId = data.id;
+      state.drive.fileId = fileId;
+    }else{
+      // Update existing file content (media upload) :contentReference[oaicite:8]{index=8}
+      const res = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${state.drive.token}`,
+            "Content-Type": "application/json; charset=UTF-8"
+          },
+          body
+        }
+      );
+      if(!res.ok) throw new Error("update media failed");
     }
-    state.drive.lastSyncISO = new Date().toISOString(); save();
-    // FORCE UPDATE UI
-    const time = new Date().toLocaleTimeString();
-    $("driveStatus").textContent = `${t("status_saved")} (${time})`;
-  }catch(e){ 
-      console.log(e); 
-      $("driveStatus").textContent = t("status_error");
+
+    state.drive.lastSyncISO = new Date().toISOString();
+    save();
+    $("driveStatus").textContent = "Guardado en Drive ✅";
+  }catch(e){
+    $("driveStatus").textContent = "Error al guardar en Drive.";
   }
 }
 
-// ---------- Init ----------
+// ---------- PWA ----------
+function setupPWA(){
+  if("serviceWorker" in navigator){
+    navigator.serviceWorker.register("./service-worker.js").catch(()=>{});
+  }
+  $("installHint").textContent = "Tip: en móvil, ‘Add to Home Screen’ para usarlo como app.";
+}
+
+// ---------- Bind UI ----------
 function bind(){
-  $("langEn").addEventListener("click", ()=>setLanguage("en"));
-  $("langEs").addEventListener("click", ()=>setLanguage("es"));
   $("addBook").addEventListener("click", addBook);
-  $("saveBook").addEventListener("click", saveBook);
-  $("deleteBook").addEventListener("click", deleteBook);
-  $("markUnread").addEventListener("click", markUnread);
-  $("rereadBook").addEventListener("click", rereadBook);
+
+  $("bookSelect").addEventListener("change", ()=>{
+    state.activeBookId = $("bookSelect").value;
+    save();
+    renderAll();
+  });
+
+  $("rangeSelect").addEventListener("change", ()=>{
+    renderAll();
+  });
+
+  $("saveBook").addEventListener("click", saveActiveBook);
+  $("deleteBook").addEventListener("click", deleteActiveBook);
+
   $("start").addEventListener("click", startTimer);
-  $("pause").addEventListener("click", ()=>togglePause(false));
+  $("pause").addEventListener("click", togglePause);
   $("finish").addEventListener("click", finishSession);
   $("hyper").addEventListener("click", hyperfocus);
-  $("makeStory").addEventListener("click", showShareOptions); 
-  $("rangeSelect").addEventListener("change", renderAll);
 
-  document.querySelectorAll(".tabbtn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".tabbtn").forEach(b => b.classList.remove("active"));
-      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-      btn.classList.add("active");
-      const target = btn.dataset.tab;
-      $("tab-" + target).classList.add("active");
-      if(target === "quotes" && state.timer.running){ togglePause(true); }
-    });
+  $("exportBtn").addEventListener("click", exportJSON);
+  $("importFile").addEventListener("change", (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(f) importJSON(f);
+    e.target.value = "";
   });
+
   $("driveSignIn").addEventListener("click", driveSignIn);
-  $("drivePull").style.display = 'none'; 
+  $("drivePull").addEventListener("click", drivePull);
   $("drivePush").addEventListener("click", drivePush);
-  
-  let cropper=null;
-  $("quoteImage").addEventListener("change", (e)=>{
-    const f=e.target.files[0]; if(!f)return;
-    const r=new FileReader(); r.onload=()=>{ $("imageToCrop").src=r.result; $("cropperOverlay").classList.add("open"); if(cropper)cropper.destroy(); cropper=new Cropper($("imageToCrop"),{viewMode:1}); }; r.readAsDataURL(f); e.target.value="";
-  });
-  $("btnScanText").addEventListener("click", async()=>{
-     if(!cropper)return; $("ocrStatus").textContent=t("status_scanning");
-     try{ const{data:{text}}=await Tesseract.recognize(cropper.getCroppedCanvas().toDataURL("image/png"),'eng'); $("quoteText").value=text.replace(/\n/g," ").trim(); $("cropperOverlay").classList.remove("open"); $("ocrStatus").textContent=""; }catch(e){alert(t("alert_ocr_error"));}
-  });
-  $("btnCancelCrop").addEventListener("click",()=>{$("cropperOverlay").classList.remove("open")});
-  $("addQuote").addEventListener("click",()=>{
-     const txt=$("quoteText").value.trim(); if(!txt)return;
-     state.quotes.push({id:uid(), bookId:$("quoteBookSelect").value||state.activeBookId, text:txt, author:$("quoteAuthor").value, bookTitle:$("quoteBookTitle").value, page:$("quotePage").value});
-     $("quoteText").value=""; save(); renderAll();
+
+  $("resetAll").addEventListener("click", ()=>{
+    if(!confirm("¿Reset total?")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    location.reload();
   });
 }
 
-load(); ensureDefaultBook(); bind(); updateLanguageUI();
-if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
+// ---------- Init ----------
+load();
+ensureDefaultBook();
+bind();
+setupPWA();
+setDriveUI(Boolean(state.drive.token));
+renderAll();
