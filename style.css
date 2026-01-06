@@ -1,3 +1,21 @@
+/* Agrega esto al inicio o donde corresponda */
+.lang-switch {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+}
+.small-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.08);
+}
+
+/* Asegurar que la imagen dentro del modal cropper no se desborde */
+.cropper-container {
+  max-height: 70vh;
+}
+
 :root{
   --bg0:#070708;
   --bg1:#0e0f11;
