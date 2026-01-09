@@ -12,509 +12,536 @@
   <link rel="preconnect" href="https://www.googleapis.com" />
 </head>
 <body>
-  <header class="top">
-    <h1 class="brand">BookQuest</h1>
-    <nav class="tabs" aria-label="Navigation">
-      <button class="tabbtn active" data-tab="dashboard" type="button">Dashboard</button>
-      <button class="tabbtn" data-tab="books" type="button">Books</button>
-      <button class="tabbtn" data-tab="session" type="button">Session</button>
-      <button class="tabbtn" data-tab="stats" type="button">Stats</button>
-      <button class="tabbtn" data-tab="achievements" type="button">Achievements</button>
-      <button class="tabbtn" data-tab="quotes" type="button">Quotes</button>
-      <button class="tabbtn" data-tab="sync" type="button">Sync</button>
-      <button class="tabbtn" data-tab="history" type="button">History</button>
-    </nav>
-  </header>
+  <div class="authGate" id="authGate" aria-hidden="true">
+    <div class="authCard">
+      <div class="authBrand">BookQuest</div>
+      <h2 data-i18n="authTitle">Sign in to continue</h2>
+      <p class="authCopy" data-i18n="authCopy">Your progress syncs to Google Drive and stays available on every device.</p>
+      <button class="btn primary" id="authSignIn" type="button" data-i18n="authSignIn">Continue with Google</button>
+      <div class="authMeta" data-i18n="authMeta">We only access your Drive app data folder.</div>
+    </div>
+  </div>
 
-  <main class="wrap">
-    <!-- DASHBOARD -->
-    <section class="tab active" id="tab-dashboard">
-      <div class="grid">
-        <section class="card col-8">
-          <h2>Dashboard</h2>
+  <div id="appShell">
+    <header class="top">
+      <h1 class="brand">BookQuest</h1>
+      <nav class="tabs" aria-label="Navigation">
+        <button class="tabbtn active" data-tab="dashboard" type="button" data-i18n="navDashboard">Dashboard</button>
+        <button class="tabbtn" data-tab="books" type="button" data-i18n="navBooks">Books</button>
+        <button class="tabbtn" data-tab="session" type="button" data-i18n="navSession">Session</button>
+        <button class="tabbtn" data-tab="stats" type="button" data-i18n="navStats">Stats</button>
+        <button class="tabbtn" data-tab="achievements" type="button" data-i18n="navAchievements">Achievements</button>
+        <button class="tabbtn" data-tab="quotes" type="button" data-i18n="navQuotes">Quotes</button>
+        <button class="tabbtn" data-tab="settings" type="button" data-i18n="navSettings">Settings</button>
+      </nav>
+    </header>
 
-          <div class="row">
-            <div class="field">
-              <label for="rangeSelect">Stats range</label>
-              <select id="rangeSelect">
-                <option value="7">7 days</option>
-                <option value="30" selected>30 days</option>
-                <option value="90">3 months</option>
-                <option value="180">6 months</option>
-                <option value="365">1 year</option>
-                <option value="99999">All time</option>
-              </select>
-            </div>
-
-            <div class="field">
-              <label for="storyScope">Story export scope</label>
-              <select id="storyScope">
-                <option value="book" selected>Active book</option>
-                <option value="overall">Overall</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="kpis">
-            <div class="kpi">
-              <div class="k">Level</div>
-              <div class="v" id="level">—</div>
-            </div>
-            <div class="kpi">
-              <div class="k">XP</div>
-              <div class="v" id="xp">—</div>
-            </div>
-            <div class="kpi">
-              <div class="k">Streak</div>
-              <div class="v" id="streak">—</div>
-            </div>
-            <div class="kpi">
-              <div class="k">Daily quest</div>
-              <div class="v" id="dailyQuest">—</div>
-            </div>
-          </div>
-
-          <div class="row">
-            <button class="btn primary" id="makeStory" type="button">Generate Story PNG</button>
-            <button class="btn" id="downloadStory" type="button" disabled>Download Story PNG</button>
-            <span class="small" id="storyHint"></span>
-          </div>
-
-          <div class="previewRow">
-            <img id="storyPreview" class="preview" alt="Story preview" />
-            <canvas id="storyCanvas" width="1080" height="1920" class="hidden" aria-hidden="true"></canvas>
-          </div>
-        </section>
-
-        <section class="card col-4">
-          <h2>Active book</h2>
-          <div id="activeBookCard" class="activeBookCard"></div>
-          <hr class="sep" />
-          <div class="row">
-            <button class="btn" id="markFinished" type="button">Mark finished</button>
-          </div>
-          <div class="notice">Finishing is based on reaching total pages (or marking manually).</div>
-        </section>
-
-        <section class="card col-12">
-          <h2>Overall (in range)</h2>
-          <div class="kpis">
-            <div class="kpi">
-              <div class="k">Books</div>
-              <div class="v" id="booksCount">—</div>
-            </div>
-            <div class="kpi">
-              <div class="k">Finished</div>
-              <div class="v" id="booksDone">—</div>
-            </div>
-            <div class="kpi">
-              <div class="k">Pages</div>
-              <div class="v" id="pagesRange">—</div>
-            </div>
-            <div class="kpi">
-              <div class="k">Minutes</div>
-              <div class="v" id="minsRange">—</div>
-            </div>
-          </div>
-        </section>
-      </div>
-    </section>
-
-    <!-- BOOKS -->
-    <section class="tab" id="tab-books">
-      <div class="grid">
-        <section class="card col-12">
-          <h2>Books</h2>
-
-          <div class="row">
-            <div class="field grow">
-              <label for="bookSelect">Active book</label>
-              <select id="bookSelect"></select>
-            </div>
-          </div>
-
-          <details open>
-            <summary>Add a book</summary>
-            <div class="formGrid">
-              <div class="field">
-                <label for="newTitle">Title</label>
-                <input id="newTitle" type="text" placeholder="e.g. Canto 2 (edition X)" />
-              </div>
-
-              <div class="field">
-                <label for="newAuthor">Author</label>
-                <input id="newAuthor" type="text" placeholder="e.g. ..." />
-              </div>
-
-              <div class="field">
-                <label for="newPublisher">Publisher</label>
-                <input id="newPublisher" type="text" placeholder="e.g. ..." />
-              </div>
-
-              <div class="field">
-                <label for="newEdition">Edition</label>
-                <input id="newEdition" type="text" placeholder="e.g. 2nd" />
-              </div>
-
-              <div class="field">
-                <label for="newTotal">Total pages</label>
-                <input id="newTotal" inputmode="numeric" placeholder="e.g. 320" />
-              </div>
-
-              <div class="field">
-                <label for="newCurrent">Current page</label>
-                <input id="newCurrent" inputmode="numeric" placeholder="e.g. 0" />
-              </div>
-
-              <div class="field">
-                <label for="newCover">Cover image (PNG/JPG/JPEG)</label>
-                <input id="newCover" type="file" accept="image/png,image/jpeg,image/jpg" />
-              </div>
-
-              <div class="field span2">
-                <button class="btn primary" id="addBook" type="button">Add</button>
-              </div>
-            </div>
-          </details>
-
-          <details>
-            <summary>Edit active book</summary>
-            <div class="formGrid">
-              <div class="field">
-                <label for="editTitle">Title</label>
-                <input id="editTitle" type="text" />
-              </div>
-
-              <div class="field">
-                <label for="editAuthor">Author</label>
-                <input id="editAuthor" type="text" />
-              </div>
-
-              <div class="field">
-                <label for="editPublisher">Publisher</label>
-                <input id="editPublisher" type="text" />
-              </div>
-
-              <div class="field">
-                <label for="editEdition">Edition</label>
-                <input id="editEdition" type="text" />
-              </div>
-
-              <div class="field">
-                <label for="editTotal">Total pages</label>
-                <input id="editTotal" inputmode="numeric" />
-              </div>
-
-              <div class="field">
-                <label for="editCurrent">Current page</label>
-                <input id="editCurrent" inputmode="numeric" />
-              </div>
-
-              <div class="field">
-                <label for="editCover">Cover image (PNG/JPG/JPEG)</label>
-                <input id="editCover" type="file" accept="image/png,image/jpeg,image/jpg" />
-              </div>
-
-              <div class="field span2">
-                <div class="row">
-                  <button class="btn primary" id="saveBook" type="button">Save</button>
-                  <button class="btn danger" id="deleteBook" type="button">Delete book</button>
-                </div>
-              </div>
-            </div>
-          </details>
-        </section>
-      </div>
-    </section>
-
-    <!-- SESSION -->
-    <section class="tab" id="tab-session">
-      <div class="grid">
-        <section class="card col-8">
-          <h2>Session</h2>
-
-          <div class="row">
-            <div class="field">
-              <label for="mode">Mode</label>
-              <select id="mode">
-                <option value="sprint" selected>Sprint</option>
-                <option value="open">Open</option>
-              </select>
-            </div>
-
-            <div class="field">
-              <label for="sprintMins">Sprint (minutes)</label>
-              <input id="sprintMins" inputmode="numeric" value="8" />
-            </div>
-          </div>
-
-          <div class="row">
-            <button class="btn primary" id="start" type="button">Start</button>
-            <button class="btn" id="pause" type="button" disabled>Pause</button>
-            <button class="btn" id="finish" type="button" disabled>End session</button>
-            <button class="btn" id="hyper" type="button" disabled>Keep going</button>
-          </div>
-
-          <div class="timer" id="timerBig">00:00</div>
-          <div class="notice" id="timerHint"></div>
-
-          <hr class="sep" />
-
-          <div class="row">
-            <label class="radio"><input type="radio" name="pagesMode" id="pagesModeRange" checked /> Page range</label>
-            <label class="radio"><input type="radio" name="pagesMode" id="pagesModeCount" /> Page count</label>
-          </div>
-
-          <div id="rangeInputs" class="row">
-            <div class="field">
-              <label for="fromPage">From page</label>
-              <input id="fromPage" inputmode="numeric" placeholder="Auto" />
-            </div>
-            <div class="field">
-              <label for="toPage">To page (required)</label>
-              <input id="toPage" inputmode="numeric" placeholder="e.g. 42" />
-            </div>
-          </div>
-
-          <div id="countInputs" class="row hidden">
-            <div class="field">
-              <label for="pagesRead">Pages read</label>
-              <input id="pagesRead" inputmode="numeric" placeholder="e.g. 6" />
-            </div>
-          </div>
-
-          <div class="notice">End session logs automatically and updates current page. Switching tabs won’t reset the timer.</div>
-        </section>
-
-        <section class="card col-4">
-          <h2>Active book stats</h2>
-          <div class="kpis kpis2">
-            <div class="kpi">
-              <div class="k">Progress</div>
-              <div class="v" id="progress">—</div>
-            </div>
-            <div class="kpi">
-              <div class="k">Pace</div>
-              <div class="v" id="pace">—</div>
-            </div>
-            <div class="kpi">
-              <div class="k">ETA</div>
-              <div class="v" id="eta">—</div>
-            </div>
-            <div class="kpi">
-              <div class="k">Sessions (range)</div>
-              <div class="v" id="sessionsN">—</div>
-            </div>
-          </div>
-        </section>
-      </div>
-    </section>
-
-    <!-- STATS -->
-    <section class="tab" id="tab-stats">
-      <div class="grid">
-        <section class="card col-6">
-          <h2>Active book charts</h2>
-          <div class="chartHeader">
-            <div class="small">Pages per day</div>
-            <button class="btn" id="dlBookPages" type="button">Download PNG</button>
-          </div>
-          <canvas id="chartPages" width="900" height="280"></canvas>
-
-          <hr class="sep" />
-
-          <div class="chartHeader">
-            <div class="small">Minutes per day</div>
-            <button class="btn" id="dlBookMins" type="button">Download PNG</button>
-          </div>
-          <canvas id="chartMins" width="900" height="280"></canvas>
-        </section>
-
-        <section class="card col-6">
-          <h2>Overall charts</h2>
-          <div class="chartHeader">
-            <div class="small">Overall pages per day</div>
-            <button class="btn" id="dlAllPages" type="button">Download PNG</button>
-          </div>
-          <canvas id="chartAllPages" width="900" height="280"></canvas>
-
-          <hr class="sep" />
-
-          <div class="chartHeader">
-            <div class="small">Overall minutes per day</div>
-            <button class="btn" id="dlAllMins" type="button">Download PNG</button>
-          </div>
-          <canvas id="chartAllMins" width="900" height="280"></canvas>
-        </section>
-      </div>
-    </section>
-
-    <!-- ACHIEVEMENTS -->
-    <section class="tab" id="tab-achievements">
-      <div class="grid">
-        <section class="card col-6">
-          <h2>Unlocked</h2>
-          <div class="row">
-            <div class="badge"><span>🏅</span><span id="achUnlocked">—</span></div>
-          </div>
-          <div class="list" id="achUnlockedList"></div>
-        </section>
-
-        <section class="card col-6">
-          <h2>Next up</h2>
-          <div class="notice" id="achNext"></div>
-          <div class="list" id="achNextList"></div>
-        </section>
-      </div>
-    </section>
-
-    <!-- QUOTES -->
-    <section class="tab" id="tab-quotes">
-      <div class="grid">
-        <section class="card col-6">
-          <h2>Add a quote</h2>
-          <div class="field">
-            <label for="quoteText">Quote</label>
-            <textarea id="quoteText" placeholder="Paste or type the quote"></textarea>
-          </div>
-
-          <div class="row">
-            <div class="field">
-              <label for="quoteAuthor">Quote author</label>
-              <input id="quoteAuthor" type="text" placeholder="e.g. the author" />
-            </div>
-            <div class="field">
-              <label for="quotePage">Page</label>
-              <input id="quotePage" inputmode="numeric" placeholder="e.g. 42" />
-            </div>
-          </div>
-
-          <div class="field">
-            <label for="quoteImage">Photo (optional)</label>
-            <input id="quoteImage" type="file" accept="image/png,image/jpeg,image/jpg" capture="environment" />
-          </div>
-
-          <div class="row">
-            <button class="btn primary" id="addQuote" type="button">Save quote</button>
-            <button class="btn" id="previewQuote" type="button" disabled>Preview PNG</button>
-            <button class="btn" id="downloadQuote" type="button" disabled>Download PNG</button>
-          </div>
-
-          <div class="previewRow">
-            <img id="quotePreview" class="preview" alt="Quote PNG preview" />
-            <canvas id="quoteCanvas" width="1080" height="1920" class="hidden" aria-hidden="true"></canvas>
-          </div>
-        </section>
-
-        <section class="card col-6">
-          <h2>Saved quotes (active book)</h2>
-          <div class="list" id="quotesList"></div>
-        </section>
-      </div>
-    </section>
-
-    <!-- SYNC -->
-    <section class="tab" id="tab-sync">
-      <div class="grid">
-        <section class="card col-12">
-          <h2>Sync</h2>
-
-          <details open>
-            <summary>Manual (backup)</summary>
-            <div class="row">
-              <button class="btn" id="exportBtn" type="button">Export JSON</button>
-              <label class="btn" for="importFile">Import JSON</label>
-              <input id="importFile" type="file" accept="application/json" class="hidden" />
-            </div>
-            <div class="notice">Use this to move your progress between devices without signing in.</div>
-          </details>
-
-          <details open>
-            <summary>Google Drive</summary>
-            <div class="notice">Stores progress as a JSON file in your Drive app data folder.</div>
-
-            <div class="row">
-              <button class="btn primary" id="driveSignIn" type="button">Sign in with Google</button>
-              <button class="btn" id="drivePull" type="button">Pull from Drive</button>
-              <button class="btn" id="drivePush" type="button">Save to Drive</button>
-              <div class="badge"><span>☁️</span><span id="driveStatus">Not signed in</span></div>
-            </div>
+    <main class="wrap">
+      <!-- DASHBOARD -->
+      <section class="tab active" id="tab-dashboard">
+        <div class="grid">
+          <section class="card col-8">
+            <h2 data-i18n="dashboardTitle">Dashboard</h2>
 
             <div class="row">
               <div class="field">
-                <label for="driveAuto">Auto-save to Drive</label>
-                <select id="driveAuto">
-                  <option value="0">Off</option>
-                  <option value="1">Every 1 minute</option>
-                  <option value="5" selected>Every 5 minutes</option>
-                  <option value="10">Every 10 minutes</option>
-                  <option value="15">Every 15 minutes</option>
+                <label for="rangeSelect" data-i18n="statsRangeLabel">Stats range</label>
+                <select id="rangeSelect">
+                  <option value="7" data-i18n="range7">7 days</option>
+                  <option value="30" selected data-i18n="range30">30 days</option>
+                  <option value="90" data-i18n="range90">3 months</option>
+                  <option value="180" data-i18n="range180">6 months</option>
+                  <option value="365" data-i18n="range365">1 year</option>
+                  <option value="99999" data-i18n="rangeAll">All time</option>
                 </select>
               </div>
 
               <div class="field">
-                <label for="googleClientId">Google OAuth Client ID</label>
-                <input id="googleClientId" type="text" placeholder="Paste your OAuth Client ID here" />
+                <label for="storyScope" data-i18n="storyScopeLabel">Story export scope</label>
+                <select id="storyScope">
+                  <option value="book" selected data-i18n="storyScopeBook">Active book</option>
+                  <option value="year" data-i18n="storyScopeYear">Year summary</option>
+                  <option value="overall" data-i18n="storyScopeOverall">Overall (range)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="kpis">
+              <div class="kpi">
+                <div class="k" data-i18n="kpiLevel">Level</div>
+                <div class="v" id="level">—</div>
+              </div>
+              <div class="kpi">
+                <div class="k" data-i18n="kpiXp">XP</div>
+                <div class="v" id="xp">—</div>
+              </div>
+              <div class="kpi">
+                <div class="k" data-i18n="kpiStreak">Streak</div>
+                <div class="v" id="streak">—</div>
+              </div>
+              <div class="kpi">
+                <div class="k" data-i18n="kpiDailyQuest">Daily quest</div>
+                <div class="v" id="dailyQuest">—</div>
               </div>
             </div>
 
             <div class="row">
+              <button class="btn primary" id="makeStory" type="button" data-i18n="makeStory">Generate Story PNG</button>
+              <button class="btn" id="downloadStory" type="button" disabled data-i18n="downloadStory">Download Story PNG</button>
+              <span class="small" id="storyHint"></span>
+            </div>
+
+            <div class="previewRow">
+              <img id="storyPreview" class="preview" alt="Story preview" />
+              <canvas id="storyCanvas" width="1080" height="1920" class="hidden" aria-hidden="true"></canvas>
+            </div>
+          </section>
+
+          <section class="card col-4">
+            <h2 data-i18n="activeBookTitle">Active book</h2>
+            <div id="activeBookCard" class="activeBookCard"></div>
+            <hr class="sep" />
+            <div class="row">
+              <button class="btn" id="markFinished" type="button" data-i18n="markFinished">Mark finished</button>
+              <button class="btn" id="shareFinish" type="button" data-i18n="shareFinish" disabled>Share finish</button>
+            </div>
+            <div class="notice" data-i18n="finishNotice">Finishing is based on reaching total pages (or marking manually).</div>
+          </section>
+
+          <section class="card col-12">
+            <h2 data-i18n="overallTitle">Overall (in range)</h2>
+            <div class="kpis">
+              <div class="kpi">
+                <div class="k" data-i18n="kpiBooks">Books</div>
+                <div class="v" id="booksCount">—</div>
+              </div>
+              <div class="kpi">
+                <div class="k" data-i18n="kpiFinished">Finished</div>
+                <div class="v" id="booksDone">—</div>
+              </div>
+              <div class="kpi">
+                <div class="k" data-i18n="kpiPages">Pages</div>
+                <div class="v" id="pagesRange">—</div>
+              </div>
+              <div class="kpi">
+                <div class="k" data-i18n="kpiMinutes">Minutes</div>
+                <div class="v" id="minsRange">—</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- BOOKS -->
+      <section class="tab" id="tab-books">
+        <div class="grid">
+          <section class="card col-12">
+            <h2 data-i18n="booksTitle">Books</h2>
+
+            <div class="row">
               <div class="field grow">
-                <label for="googleApiKey">Google API key (optional)</label>
-                <input id="googleApiKey" type="text" placeholder="Optional (only needed for some setups)" />
+                <label for="bookSelect" data-i18n="activeBookLabel">Active book</label>
+                <select id="bookSelect"></select>
               </div>
             </div>
 
-            <div class="notice" id="driveHint"></div>
-          </details>
-        </section>
-      </div>
-    </section>
+            <details open>
+              <summary data-i18n="addBookSummary">Add a book</summary>
+              <div class="formGrid">
+                <div class="field">
+                  <label for="newTitle" data-i18n="titleLabel">Title</label>
+                  <input id="newTitle" type="text" data-i18n-placeholder="titlePlaceholder" placeholder="e.g. Canto 2 (edition X)" />
+                </div>
 
-    <!-- HISTORY -->
-    <section class="tab" id="tab-history">
-      <div class="grid">
-        <section class="card col-12">
-          <h2>History (latest 50)</h2>
-          <div class="list" id="history"></div>
-        </section>
-      </div>
-    </section>
-  </main>
+                <div class="field">
+                  <label for="newAuthor" data-i18n="authorLabel">Author</label>
+                  <input id="newAuthor" type="text" data-i18n-placeholder="authorPlaceholder" placeholder="e.g. ..." />
+                </div>
 
-  <!-- End Session modal -->
-  <div class="modalOverlay" id="endOverlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="endTitle">
-      <h3 id="endTitle">Log this session</h3>
-      <div class="notice">Minutes captured: <strong id="endMinsAuto">—</strong></div>
+                <div class="field">
+                  <label for="newPublisher" data-i18n="publisherLabel">Publisher</label>
+                  <input id="newPublisher" type="text" data-i18n-placeholder="publisherPlaceholder" placeholder="e.g. ..." />
+                </div>
 
-      <div class="formGrid">
-        <div class="field">
-          <label for="endFromPage">From page</label>
-          <input id="endFromPage" inputmode="numeric" />
+                <div class="field">
+                  <label for="newEdition" data-i18n="editionLabel">Edition</label>
+                  <input id="newEdition" type="text" data-i18n-placeholder="editionPlaceholder" placeholder="e.g. 2nd" />
+                </div>
+
+                <div class="field">
+                  <label for="newTotal" data-i18n="totalPagesLabel">Total pages</label>
+                  <input id="newTotal" inputmode="numeric" data-i18n-placeholder="totalPagesPlaceholder" placeholder="e.g. 320" />
+                </div>
+
+                <div class="field">
+                  <label for="newCurrent" data-i18n="currentPageLabel">Current page</label>
+                  <input id="newCurrent" inputmode="numeric" data-i18n-placeholder="currentPagePlaceholder" placeholder="e.g. 0" />
+                </div>
+
+                <div class="field">
+                  <label for="newCover" data-i18n="coverLabel">Cover image (PNG/JPG/JPEG)</label>
+                  <input id="newCover" type="file" accept="image/png,image/jpeg,image/jpg" />
+                </div>
+
+                <div class="field span2">
+                  <button class="btn primary" id="addBook" type="button" data-i18n="addBook">Add</button>
+                </div>
+              </div>
+            </details>
+
+            <details>
+              <summary data-i18n="editBookSummary">Edit active book</summary>
+              <div class="formGrid">
+                <div class="field">
+                  <label for="editTitle" data-i18n="titleLabel">Title</label>
+                  <input id="editTitle" type="text" />
+                </div>
+
+                <div class="field">
+                  <label for="editAuthor" data-i18n="authorLabel">Author</label>
+                  <input id="editAuthor" type="text" />
+                </div>
+
+                <div class="field">
+                  <label for="editPublisher" data-i18n="publisherLabel">Publisher</label>
+                  <input id="editPublisher" type="text" />
+                </div>
+
+                <div class="field">
+                  <label for="editEdition" data-i18n="editionLabel">Edition</label>
+                  <input id="editEdition" type="text" />
+                </div>
+
+                <div class="field">
+                  <label for="editTotal" data-i18n="totalPagesLabel">Total pages</label>
+                  <input id="editTotal" inputmode="numeric" />
+                </div>
+
+                <div class="field">
+                  <label for="editCurrent" data-i18n="currentPageLabel">Current page</label>
+                  <input id="editCurrent" inputmode="numeric" />
+                </div>
+
+                <div class="field">
+                  <label for="editCover" data-i18n="coverLabel">Cover image (PNG/JPG/JPEG)</label>
+                  <input id="editCover" type="file" accept="image/png,image/jpeg,image/jpg" />
+                </div>
+
+                <div class="field span2">
+                  <div class="row">
+                    <button class="btn primary" id="saveBook" type="button" data-i18n="saveBook">Save</button>
+                    <button class="btn danger" id="deleteBook" type="button" data-i18n="deleteBook">Delete book</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </section>
         </div>
-        <div class="field">
-          <label for="endToPage">Last page read (required)</label>
-          <input id="endToPage" inputmode="numeric" />
-        </div>
-        <div class="field">
-          <label for="endMins">Minutes (edit if needed)</label>
-          <input id="endMins" inputmode="numeric" />
-        </div>
-      </div>
+      </section>
 
-      <div class="modalActions">
-        <button class="btn primary" id="endSave" type="button">Save session</button>
-        <button class="btn" id="endCancel" type="button">Cancel</button>
-      </div>
+      <!-- SESSION -->
+      <section class="tab" id="tab-session">
+        <div class="grid">
+          <section class="card col-8">
+            <h2 data-i18n="sessionTitle">Session</h2>
 
-      <hr class="sep" />
+            <div class="row">
+              <div class="field">
+                <label for="mode" data-i18n="modeLabel">Mode</label>
+                <select id="mode">
+                  <option value="sprint" selected data-i18n="modeSprint">Sprint</option>
+                  <option value="open" data-i18n="modeOpen">Open</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="sprintMins" data-i18n="sprintLabel">Sprint (minutes)</label>
+                <input id="sprintMins" inputmode="numeric" value="8" />
+              </div>
+            </div>
+
+            <div class="row">
+              <button class="btn primary" id="start" type="button" data-i18n="start">Start</button>
+              <button class="btn" id="pause" type="button" disabled data-i18n="pause">Pause</button>
+              <button class="btn" id="finish" type="button" disabled data-i18n="endSession">End session</button>
+              <button class="btn" id="hyper" type="button" disabled data-i18n="keepGoing">Keep going</button>
+            </div>
+
+            <div class="timer" id="timerBig">00:00</div>
+            <div class="notice" id="timerHint"></div>
+
+            <hr class="sep" />
+
+            <div class="row">
+              <label class="radio"><input type="radio" name="pagesMode" id="pagesModeRange" checked /> <span data-i18n="pageRange">Page range</span></label>
+              <label class="radio"><input type="radio" name="pagesMode" id="pagesModeCount" /> <span data-i18n="pageCount">Page count</span></label>
+            </div>
+
+            <div id="rangeInputs" class="row">
+              <div class="field">
+                <label for="fromPage" data-i18n="fromPageLabel">From page</label>
+                <input id="fromPage" inputmode="numeric" data-i18n-placeholder="fromPagePlaceholder" placeholder="Auto" />
+              </div>
+              <div class="field">
+                <label for="toPage" data-i18n="toPageLabel">To page (required)</label>
+                <input id="toPage" inputmode="numeric" data-i18n-placeholder="toPagePlaceholder" placeholder="e.g. 42" />
+              </div>
+            </div>
+
+            <div id="countInputs" class="row hidden">
+              <div class="field">
+                <label for="pagesRead" data-i18n="pagesReadLabel">Pages read</label>
+                <input id="pagesRead" inputmode="numeric" data-i18n-placeholder="pagesReadPlaceholder" placeholder="e.g. 6" />
+              </div>
+            </div>
+
+            <div class="notice" data-i18n="sessionNotice">End session logs automatically and updates current page. Switching tabs won’t reset the timer.</div>
+          </section>
+
+          <section class="card col-4">
+            <h2 data-i18n="activeBookStatsTitle">Active book stats</h2>
+            <div class="kpis kpis2">
+              <div class="kpi">
+                <div class="k" data-i18n="progressLabel">Progress</div>
+                <div class="v" id="progress">—</div>
+              </div>
+              <div class="kpi">
+                <div class="k" data-i18n="paceLabel">Pace</div>
+                <div class="v" id="pace">—</div>
+              </div>
+              <div class="kpi">
+                <div class="k" data-i18n="etaLabel">ETA</div>
+                <div class="v" id="eta">—</div>
+              </div>
+              <div class="kpi">
+                <div class="k" data-i18n="sessionsLabel">Sessions (range)</div>
+                <div class="v" id="sessionsN">—</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- STATS -->
+      <section class="tab" id="tab-stats">
+        <div class="grid">
+          <section class="card col-6">
+            <h2 data-i18n="activeBookCharts">Active book charts</h2>
+            <div class="chartHeader">
+              <div class="small" data-i18n="pagesPerDay">Pages per day</div>
+              <button class="btn" id="dlBookPages" type="button" data-i18n="downloadPng">Download PNG</button>
+            </div>
+            <canvas id="chartPages" width="900" height="280"></canvas>
+
+            <hr class="sep" />
+
+            <div class="chartHeader">
+              <div class="small" data-i18n="minsPerDay">Minutes per day</div>
+              <button class="btn" id="dlBookMins" type="button" data-i18n="downloadPng">Download PNG</button>
+            </div>
+            <canvas id="chartMins" width="900" height="280"></canvas>
+          </section>
+
+          <section class="card col-6">
+            <h2 data-i18n="overallCharts">Overall charts</h2>
+            <div class="chartHeader">
+              <div class="small" data-i18n="overallPagesPerDay">Overall pages per day</div>
+              <button class="btn" id="dlAllPages" type="button" data-i18n="downloadPng">Download PNG</button>
+            </div>
+            <canvas id="chartAllPages" width="900" height="280"></canvas>
+
+            <hr class="sep" />
+
+            <div class="chartHeader">
+              <div class="small" data-i18n="overallMinsPerDay">Overall minutes per day</div>
+              <button class="btn" id="dlAllMins" type="button" data-i18n="downloadPng">Download PNG</button>
+            </div>
+            <canvas id="chartAllMins" width="900" height="280"></canvas>
+          </section>
+        </div>
+      </section>
+
+      <!-- ACHIEVEMENTS -->
+      <section class="tab" id="tab-achievements">
+        <div class="grid">
+          <section class="card col-6">
+            <h2 data-i18n="unlockedTitle">Unlocked</h2>
+            <div class="row">
+              <div class="badge"><span>🏅</span><span id="achUnlocked">—</span></div>
+            </div>
+            <div class="list" id="achUnlockedList"></div>
+          </section>
+
+          <section class="card col-6">
+            <h2 data-i18n="nextUpTitle">Next up</h2>
+            <div class="notice" id="achNext"></div>
+            <div class="list" id="achNextList"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- QUOTES -->
+      <section class="tab" id="tab-quotes">
+        <div class="grid">
+          <section class="card col-6">
+            <h2 data-i18n="addQuoteTitle">Add a quote</h2>
+            <div class="notice" data-i18n="quotePhotoHint">Optional: extract text from a photo first, then edit it below.</div>
+            <div class="row">
+              <button class="btn" id="quoteOcrStart" type="button" data-i18n="quoteOcr">Use photo for OCR</button>
+              <span class="small" id="quoteOcrStatus"></span>
+            </div>
+            <div class="field">
+              <label for="quoteText" data-i18n="quoteLabel">Quote</label>
+              <textarea id="quoteText" data-i18n-placeholder="quotePlaceholder" placeholder="Paste or type the quote"></textarea>
+            </div>
+
+            <div class="row">
+              <div class="field">
+                <label for="quoteAuthor" data-i18n="quoteAuthorLabel">Quote author</label>
+                <input id="quoteAuthor" type="text" data-i18n-placeholder="quoteAuthorPlaceholder" placeholder="e.g. the author" />
+              </div>
+              <div class="field">
+                <label for="quotePage" data-i18n="quotePageLabel">Page</label>
+                <input id="quotePage" inputmode="numeric" data-i18n-placeholder="quotePagePlaceholder" placeholder="e.g. 42" />
+              </div>
+            </div>
+
+            <div class="row">
+              <button class="btn primary" id="addQuote" type="button" data-i18n="saveQuote">Save quote</button>
+              <button class="btn" id="previewQuote" type="button" disabled data-i18n="previewQuote">Preview PNG</button>
+              <button class="btn" id="downloadQuote" type="button" disabled data-i18n="downloadQuote">Download PNG</button>
+            </div>
+
+            <div class="previewRow">
+              <img id="quotePreview" class="preview" alt="Quote PNG preview" />
+              <canvas id="quoteCanvas" width="1080" height="1920" class="hidden" aria-hidden="true"></canvas>
+            </div>
+          </section>
+
+          <section class="card col-6">
+            <h2 data-i18n="savedQuotesTitle">Saved quotes (active book)</h2>
+            <div class="list" id="quotesList"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="tab" id="tab-settings">
+        <div class="grid">
+          <section class="card col-12">
+            <h2 data-i18n="settingsTitle">Settings</h2>
+
+            <details open>
+              <summary data-i18n="languageSummary">Language</summary>
+              <div class="row">
+                <div class="field">
+                  <label for="appLang" data-i18n="languageLabel">Language</label>
+                  <select id="appLang">
+                    <option value="en-GB" data-i18n="langEn">English (UK)</option>
+                    <option value="es-MX" data-i18n="langEs">Spanish (Mexico)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="notice" data-i18n="languageNotice">App text and share images follow this choice.</div>
+            </details>
+
+            <details open>
+              <summary data-i18n="driveSummary">Google Drive</summary>
+              <div class="notice" data-i18n="driveNotice">Progress and covers sync to your Drive app data folder.</div>
+
+              <div class="row">
+                <button class="btn primary" id="driveSignIn" type="button" data-i18n="driveReconnect">Reconnect Google</button>
+                <button class="btn" id="drivePull" type="button" data-i18n="drivePull">Pull from Drive</button>
+                <button class="btn" id="drivePush" type="button" data-i18n="drivePush">Save to Drive</button>
+                <div class="badge"><span>☁️</span><span id="driveStatus">Not signed in</span></div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="driveAuto" data-i18n="driveAutoLabel">Auto-save to Drive</label>
+                  <select id="driveAuto">
+                    <option value="0" data-i18n="driveAutoOff">Off</option>
+                    <option value="1" selected data-i18n="driveAuto1">Every 1 minute</option>
+                    <option value="5" data-i18n="driveAuto5">Every 5 minutes</option>
+                    <option value="10" data-i18n="driveAuto10">Every 10 minutes</option>
+                    <option value="15" data-i18n="driveAuto15">Every 15 minutes</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label data-i18n="lastPullLabel">Last pull</label>
+                  <div class="badge"><span>⬇️</span><span id="lastPull">—</span></div>
+                </div>
+                <div class="field">
+                  <label data-i18n="lastPushLabel">Last save</label>
+                  <div class="badge"><span>⬆️</span><span id="lastPush">—</span></div>
+                </div>
+              </div>
+
+              <div class="notice" data-i18n="driveLogLabel">Recent Drive uploads</div>
+              <div class="list" id="driveSyncLog"></div>
+              <div class="notice" id="driveHint"></div>
+            </details>
+
+            <details>
+              <summary data-i18n="manualBackupSummary">Manual backup</summary>
+              <div class="row">
+                <button class="btn" id="exportBtn" type="button" data-i18n="exportJson">Export JSON</button>
+                <label class="btn" for="importFile" data-i18n="importJson">Import JSON</label>
+                <input id="importFile" type="file" accept="application/json" class="hidden" />
+              </div>
+              <div class="notice" data-i18n="manualBackupNotice">Use this to move your progress between devices without signing in.</div>
+            </details>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Finish Share Modal -->
+  <div class="modalOverlay" id="finishOverlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="finishTitle">
+      <h3 id="finishTitle" data-i18n="finishShareTitle">Share your finish</h3>
+      <div class="field">
+        <label for="finishRating" data-i18n="finishRatingLabel">Rating</label>
+        <select id="finishRating">
+          <option value="" data-i18n="finishRatingNone">No rating</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+        </select>
+      </div>
 
       <div class="row">
-        <button class="btn" id="editLast" type="button">Edit last session</button>
-        <button class="btn danger" id="deleteLast" type="button">Delete last session</button>
+        <button class="btn primary" id="finishGenerate" type="button" data-i18n="finishGenerate">Generate Finish PNG</button>
+        <button class="btn" id="finishDownload" type="button" disabled data-i18n="finishDownload">Download PNG</button>
+        <button class="btn" id="finishClose" type="button" data-i18n="finishClose">Close</button>
       </div>
-      <div class="notice" id="endMsg"></div>
+
+      <div class="previewRow">
+        <img id="finishPreview" class="preview" alt="Finish PNG preview" />
+        <canvas id="finishCanvas" width="1080" height="1920" class="hidden" aria-hidden="true"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- OCR Modal -->
+  <div class="modalOverlay" id="ocrOverlay" aria-hidden="true">
+    <div class="modal modalWide" role="dialog" aria-modal="true" aria-labelledby="ocrTitle">
+      <h3 id="ocrTitle" data-i18n="ocrTitle">Extract text from photo</h3>
+      <div class="row">
+        <label class="btn" for="ocrUpload" data-i18n="ocrUpload">Upload photo</label>
+        <label class="btn" for="ocrCamera" data-i18n="ocrCamera">Take photo</label>
+        <input id="ocrUpload" type="file" accept="image/png,image/jpeg,image/jpg" class="hidden" />
+        <input id="ocrCamera" type="file" accept="image/png,image/jpeg,image/jpg" capture="environment" class="hidden" />
+      </div>
+      <canvas id="ocrCanvas" width="880" height="520"></canvas>
+      <div class="notice" id="ocrHint" data-i18n="ocrHint">Drag to select the text area, then run OCR.</div>
+      <div class="modalActions">
+        <button class="btn primary" id="ocrUse" type="button" data-i18n="ocrUse">Use selection</button>
+        <button class="btn" id="ocrCancel" type="button" data-i18n="ocrCancel">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -522,6 +549,7 @@
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" async defer></script>
   <script src="./app.js"></script>
   <script src="./config.js"></script>
 </body>

@@ -1,30 +1,524 @@
 const $ = (id) => document.getElementById(id);
 
-const STORAGE_KEY = "bookquest_state_v2";
+const STORAGE_KEY = "bookquest_state_v3";
 const DRIVE_FILENAME = "bookquest_state.json";
+const DEFAULT_CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
 
-// ---------- State ----------
-const state = {
-  books: {},           // id -> {id,title,totalPages,currentPage,createdAt}
-  activeBookId: null,
-  sessions: [],        // {id,bookId,startISO,endISO,mins,pages}
-  timer: { running:false, mode:"sprint", sprintMins:8, startMs:0, elapsedMs:0, intervalId:null, bell:false, paused:false },
-  drive: { token:null, fileId:null, lastSyncISO:null },
+const I18N = {
+  "en-GB": {
+    authTitle: "Sign in to continue",
+    authCopy: "Your progress syncs to Google Drive and stays available on every device.",
+    authSignIn: "Continue with Google",
+    authMeta: "We only access your Drive app data folder.",
+    authCheckingTitle: "Checking your session",
+    authCheckingCopy: "Hang tight. Verifying your Google session.",
+    navDashboard: "Dashboard",
+    navBooks: "Books",
+    navSession: "Session",
+    navStats: "Stats",
+    navAchievements: "Achievements",
+    navQuotes: "Quotes",
+    navSettings: "Settings",
+    dashboardTitle: "Dashboard",
+    statsRangeLabel: "Stats range",
+    range7: "7 days",
+    range30: "30 days",
+    range90: "3 months",
+    range180: "6 months",
+    range365: "1 year",
+    rangeAll: "All time",
+    storyScopeLabel: "Story export scope",
+    storyScopeBook: "Active book",
+    storyScopeYear: "Year summary",
+    storyScopeOverall: "Overall (range)",
+    kpiLevel: "Level",
+    kpiXp: "XP",
+    kpiStreak: "Streak",
+    kpiDailyQuest: "Daily quest",
+    makeStory: "Generate Story PNG",
+    downloadStory: "Download Story PNG",
+    activeBookTitle: "Active book",
+    markFinished: "Mark finished",
+    shareFinish: "Share finish",
+    finishNotice: "Finishing is based on reaching total pages (or marking manually).",
+    overallTitle: "Overall (in range)",
+    kpiBooks: "Books",
+    kpiFinished: "Finished",
+    kpiPages: "Pages",
+    kpiMinutes: "Minutes",
+    booksTitle: "Books",
+    activeBookLabel: "Active book",
+    addBookSummary: "Add a book",
+    editBookSummary: "Edit active book",
+    titleLabel: "Title",
+    titlePlaceholder: "e.g. Canto 2 (edition X)",
+    authorLabel: "Author",
+    authorPlaceholder: "e.g. ...",
+    publisherLabel: "Publisher",
+    publisherPlaceholder: "e.g. ...",
+    editionLabel: "Edition",
+    editionPlaceholder: "e.g. 2nd",
+    totalPagesLabel: "Total pages",
+    totalPagesPlaceholder: "e.g. 320",
+    currentPageLabel: "Current page",
+    currentPagePlaceholder: "e.g. 0",
+    coverLabel: "Cover image (PNG/JPG/JPEG)",
+    addBook: "Add",
+    saveBook: "Save",
+    deleteBook: "Delete book",
+    sessionTitle: "Session",
+    modeLabel: "Mode",
+    modeSprint: "Sprint",
+    modeOpen: "Open",
+    sprintLabel: "Sprint (minutes)",
+    start: "Start",
+    pause: "Pause",
+    resume: "Resume",
+    endSession: "End session",
+    keepGoing: "Keep going",
+    pageRange: "Page range",
+    pageCount: "Page count",
+    fromPageLabel: "From page",
+    fromPagePlaceholder: "Auto",
+    toPageLabel: "To page (required)",
+    toPagePlaceholder: "e.g. 42",
+    pagesReadLabel: "Pages read",
+    pagesReadPlaceholder: "e.g. 6",
+    sessionNotice: "End session logs automatically and updates current page. Switching tabs won’t reset the timer.",
+    activeBookStatsTitle: "Active book stats",
+    progressLabel: "Progress",
+    paceLabel: "Pace",
+    etaLabel: "ETA",
+    sessionsLabel: "Sessions (range)",
+    activeBookCharts: "Active book charts",
+    pagesPerDay: "Pages per day",
+    minsPerDay: "Minutes per day",
+    downloadPng: "Download PNG",
+    overallCharts: "Overall charts",
+    overallPagesPerDay: "Overall pages per day",
+    overallMinsPerDay: "Overall minutes per day",
+    unlockedTitle: "Unlocked",
+    nextUpTitle: "Next up",
+    addQuoteTitle: "Add a quote",
+    quotePhotoHint: "Optional: extract text from a photo first, then edit it below.",
+    quoteOcr: "Use photo for OCR",
+    quoteLabel: "Quote",
+    quotePlaceholder: "Paste or type the quote",
+    quoteAuthorLabel: "Quote author",
+    quoteAuthorPlaceholder: "e.g. the author",
+    quotePageLabel: "Page",
+    quotePagePlaceholder: "e.g. 42",
+    saveQuote: "Save quote",
+    previewQuote: "Preview PNG",
+    downloadQuote: "Download PNG",
+    savedQuotesTitle: "Saved quotes (active book)",
+    settingsTitle: "Settings",
+    languageSummary: "Language",
+    languageLabel: "Language",
+    langEn: "English (UK)",
+    langEs: "Spanish (Mexico)",
+    languageNotice: "App text and share images follow this choice.",
+    driveSummary: "Google Drive",
+    driveNotice: "Progress and covers sync to your Drive app data folder.",
+    driveReconnect: "Reconnect Google",
+    drivePull: "Pull from Drive",
+    drivePush: "Save to Drive",
+    driveAutoLabel: "Auto-save to Drive",
+    driveAutoOff: "Off",
+    driveAuto1: "Every 1 minute",
+    driveAuto5: "Every 5 minutes",
+    driveAuto10: "Every 10 minutes",
+    driveAuto15: "Every 15 minutes",
+    lastPullLabel: "Last pull",
+    lastPushLabel: "Last save",
+    driveLogLabel: "Recent Drive uploads",
+    manualBackupSummary: "Manual backup",
+    exportJson: "Export JSON",
+    importJson: "Import JSON",
+    manualBackupNotice: "Use this to move your progress between devices without signing in.",
+    finishShareTitle: "Share your finish",
+    finishRatingLabel: "Rating",
+    finishRatingNone: "No rating",
+    finishGenerate: "Generate Finish PNG",
+    finishDownload: "Download PNG",
+    finishClose: "Close",
+    ocrTitle: "Extract text from photo",
+    ocrUpload: "Upload photo",
+    ocrCamera: "Take photo",
+    ocrHint: "Drag to select the text area, then run OCR.",
+    ocrUse: "Use selection",
+    ocrCancel: "Cancel",
+    statusConnected: "Connected",
+    statusNotSigned: "Not signed in",
+    statusPulled: "Pulled from Drive",
+    statusSaved: "Saved to Drive",
+    statusNoFile: "No file in Drive yet.",
+    statusPullError: "Error pulling from Drive.",
+    statusPushError: "Error saving to Drive.",
+    toastSaved: "Saved",
+    toastUpdated: "Updated",
+    toastImported: "Imported",
+    toastOcrMissing: "Add a photo first.",
+    toastOcrWorking: "Reading text...",
+    toastOcrDone: "Text ready. Edit if needed.",
+    confirmDeleteBook: "Delete \"{title}\"? (Sessions stay as deleted book)",
+    confirmReset: "Reset everything?",
+    alertNeedPages: "Add total pages (no blanks).",
+    alertImportFail: "Could not import that JSON.",
+    timerSprintDone: "Sprint complete. Keep going if you want.",
+    timerSprintHint: "Just start. Decide at the end.",
+    timerPaused: "Paused.",
+    timerFlowHint: "Flow: no limit. You decide.",
+    timerHyperHint: "Hyperfocus. Keep going.",
+    sessionSaved: "Session saved. Another mini-session?",
+    sessionNeedToPage: "Enter a final page.",
+    etaFinished: "Finished",
+    etaNeedPace: "Need one session with pages",
+    storyTitleYear: "Your Reading Year",
+    storyTitleOverall: "Your Reading Summary",
+    storyTitleBook: "Current Book",
+    storyBook: "Book",
+    storyPages: "Pages",
+    storyMinutes: "Minutes",
+    storyHours: "Hours",
+    storyBooks: "Books",
+    storyFinished: "Finished",
+    storySessions: "Sessions",
+    storyProgress: "Progress",
+    storyPace: "Pace",
+    storyEta: "ETA",
+    storyApp: "BookQuest",
+    finishShareHeadline: "Finished",
+    finishShareRating: "Rating",
+    quoteShareLabel: "Quote",
+    quoteShareBook: "Book",
+    quoteSharePage: "Page",
+    quoteShareApp: "BookQuest",
+    quoteCopy: "Copy",
+    quoteDelete: "Delete",
+    dayStreak: "day streak",
+    dailyQuestDone: "Done",
+    dailyQuestGoal: "Read {pages} pages",
+    paceLabelUnit: "pages/min",
+    minutesUnit: "min",
+    pagesUnit: "pages",
+    untitled: "Untitled",
+    noQuotes: "No quotes yet.",
+    noUploads: "No uploads yet.",
+    daysUnit: "days"
+  },
+  "es-MX": {
+    authTitle: "Inicia sesion para continuar",
+    authCopy: "Tu progreso se sincroniza con Google Drive y queda disponible en cada dispositivo.",
+    authSignIn: "Continuar con Google",
+    authMeta: "Solo usamos tu carpeta de datos de la app en Drive.",
+    authCheckingTitle: "Verificando tu sesion",
+    authCheckingCopy: "Espera un momento. Revisamos tu sesion de Google.",
+    navDashboard: "Panel",
+    navBooks: "Libros",
+    navSession: "Sesion",
+    navStats: "Estadisticas",
+    navAchievements: "Logros",
+    navQuotes: "Citas",
+    navSettings: "Ajustes",
+    dashboardTitle: "Panel",
+    statsRangeLabel: "Rango",
+    range7: "7 dias",
+    range30: "30 dias",
+    range90: "3 meses",
+    range180: "6 meses",
+    range365: "1 ano",
+    rangeAll: "Todo",
+    storyScopeLabel: "Alcance de historia",
+    storyScopeBook: "Libro activo",
+    storyScopeYear: "Resumen anual",
+    storyScopeOverall: "Total (rango)",
+    kpiLevel: "Nivel",
+    kpiXp: "XP",
+    kpiStreak: "Racha",
+    kpiDailyQuest: "Mision diaria",
+    makeStory: "Generar PNG",
+    downloadStory: "Descargar PNG",
+    activeBookTitle: "Libro activo",
+    markFinished: "Marcar terminado",
+    shareFinish: "Compartir final",
+    finishNotice: "Se considera terminado al llegar al total de paginas (o marcar manual).",
+    overallTitle: "Total (en rango)",
+    kpiBooks: "Libros",
+    kpiFinished: "Terminados",
+    kpiPages: "Paginas",
+    kpiMinutes: "Minutos",
+    booksTitle: "Libros",
+    activeBookLabel: "Libro activo",
+    addBookSummary: "Agregar libro",
+    editBookSummary: "Editar libro activo",
+    titleLabel: "Titulo",
+    titlePlaceholder: "Ej. Canto 2 (edicion X)",
+    authorLabel: "Autor",
+    authorPlaceholder: "Ej. ...",
+    publisherLabel: "Editorial",
+    publisherPlaceholder: "Ej. ...",
+    editionLabel: "Edicion",
+    editionPlaceholder: "Ej. 2a",
+    totalPagesLabel: "Paginas totales",
+    totalPagesPlaceholder: "Ej. 320",
+    currentPageLabel: "Pagina actual",
+    currentPagePlaceholder: "Ej. 0",
+    coverLabel: "Portada (PNG/JPG/JPEG)",
+    addBook: "Agregar",
+    saveBook: "Guardar",
+    deleteBook: "Borrar libro",
+    sessionTitle: "Sesion",
+    modeLabel: "Modo",
+    modeSprint: "Sprint",
+    modeOpen: "Libre",
+    sprintLabel: "Sprint (minutos)",
+    start: "Iniciar",
+    pause: "Pausa",
+    resume: "Reanudar",
+    endSession: "Terminar sesion",
+    keepGoing: "Seguir",
+    pageRange: "Rango de paginas",
+    pageCount: "Conteo de paginas",
+    fromPageLabel: "Desde",
+    fromPagePlaceholder: "Auto",
+    toPageLabel: "Hasta (requerido)",
+    toPagePlaceholder: "Ej. 42",
+    pagesReadLabel: "Paginas leidas",
+    pagesReadPlaceholder: "Ej. 6",
+    sessionNotice: "Al terminar se guarda y actualiza la pagina. Cambiar de pestana no reinicia.",
+    activeBookStatsTitle: "Estadisticas",
+    progressLabel: "Progreso",
+    paceLabel: "Ritmo",
+    etaLabel: "ETA",
+    sessionsLabel: "Sesiones (rango)",
+    activeBookCharts: "Graficas del libro",
+    pagesPerDay: "Paginas por dia",
+    minsPerDay: "Minutos por dia",
+    downloadPng: "Descargar PNG",
+    overallCharts: "Graficas totales",
+    overallPagesPerDay: "Paginas por dia (total)",
+    overallMinsPerDay: "Minutos por dia (total)",
+    unlockedTitle: "Desbloqueados",
+    nextUpTitle: "Siguiente",
+    addQuoteTitle: "Agregar cita",
+    quotePhotoHint: "Opcional: extrae texto de una foto y luego editalo.",
+    quoteOcr: "Usar foto con OCR",
+    quoteLabel: "Cita",
+    quotePlaceholder: "Pega o escribe la cita",
+    quoteAuthorLabel: "Autor",
+    quoteAuthorPlaceholder: "Ej. el autor",
+    quotePageLabel: "Pagina",
+    quotePagePlaceholder: "Ej. 42",
+    saveQuote: "Guardar cita",
+    previewQuote: "Vista previa",
+    downloadQuote: "Descargar PNG",
+    savedQuotesTitle: "Citas guardadas (libro activo)",
+    settingsTitle: "Ajustes",
+    languageSummary: "Idioma",
+    languageLabel: "Idioma",
+    langEn: "Ingles (UK)",
+    langEs: "Espanol (MX)",
+    languageNotice: "La app y las imagenes siguen esta opcion.",
+    driveSummary: "Google Drive",
+    driveNotice: "El progreso y portadas se guardan en tu carpeta de datos de Drive.",
+    driveReconnect: "Reconectar Google",
+    drivePull: "Traer de Drive",
+    drivePush: "Guardar en Drive",
+    driveAutoLabel: "Auto-guardar en Drive",
+    driveAutoOff: "Apagado",
+    driveAuto1: "Cada 1 minuto",
+    driveAuto5: "Cada 5 minutos",
+    driveAuto10: "Cada 10 minutos",
+    driveAuto15: "Cada 15 minutos",
+    lastPullLabel: "Ultimo pull",
+    lastPushLabel: "Ultimo guardado",
+    driveLogLabel: "Subidas recientes",
+    manualBackupSummary: "Backup manual",
+    exportJson: "Exportar JSON",
+    importJson: "Importar JSON",
+    manualBackupNotice: "Usalo para mover tu progreso sin iniciar sesion.",
+    finishShareTitle: "Comparte tu final",
+    finishRatingLabel: "Calificacion",
+    finishRatingNone: "Sin calificacion",
+    finishGenerate: "Generar PNG",
+    finishDownload: "Descargar PNG",
+    finishClose: "Cerrar",
+    ocrTitle: "Extraer texto de foto",
+    ocrUpload: "Subir foto",
+    ocrCamera: "Tomar foto",
+    ocrHint: "Arrastra para seleccionar el area y luego aplica OCR.",
+    ocrUse: "Usar seleccion",
+    ocrCancel: "Cancelar",
+    statusConnected: "Conectado",
+    statusNotSigned: "No conectado",
+    statusPulled: "Traido de Drive",
+    statusSaved: "Guardado en Drive",
+    statusNoFile: "Aun no hay archivo en Drive.",
+    statusPullError: "Error al traer de Drive.",
+    statusPushError: "Error al guardar en Drive.",
+    toastSaved: "Guardado",
+    toastUpdated: "Actualizado",
+    toastImported: "Importado",
+    toastOcrMissing: "Agrega una foto primero.",
+    toastOcrWorking: "Leyendo texto...",
+    toastOcrDone: "Texto listo. Puedes editar.",
+    confirmDeleteBook: "Borrar \"{title}\"? (Sesiones quedan como libro borrado)",
+    confirmReset: "Reiniciar todo?",
+    alertNeedPages: "Agrega paginas totales.",
+    alertImportFail: "No pude importar ese JSON.",
+    timerSprintDone: "Sprint completo. Sigue si quieres.",
+    timerSprintHint: "Solo empieza. Decide al final.",
+    timerPaused: "En pausa.",
+    timerFlowHint: "Flow: sin limite. Tu mandas.",
+    timerHyperHint: "Hyperfocus. Sigue.",
+    sessionSaved: "Sesion guardada. Otra mini-sesion?",
+    sessionNeedToPage: "Agrega la ultima pagina.",
+    etaFinished: "Terminado",
+    etaNeedPace: "Necesito una sesion con paginas",
+    storyTitleYear: "Tu ano lector",
+    storyTitleOverall: "Resumen lector",
+    storyTitleBook: "Libro actual",
+    storyBook: "Libro",
+    storyPages: "Paginas",
+    storyMinutes: "Minutos",
+    storyHours: "Horas",
+    storyBooks: "Libros",
+    storyFinished: "Terminados",
+    storySessions: "Sesiones",
+    storyProgress: "Progreso",
+    storyPace: "Ritmo",
+    storyEta: "ETA",
+    storyApp: "BookQuest",
+    finishShareHeadline: "Terminado",
+    finishShareRating: "Calificacion",
+    quoteShareLabel: "Cita",
+    quoteShareBook: "Libro",
+    quoteSharePage: "Pagina",
+    quoteShareApp: "BookQuest",
+    quoteCopy: "Copiar",
+    quoteDelete: "Borrar",
+    dayStreak: "dias de racha",
+    dailyQuestDone: "Listo",
+    dailyQuestGoal: "Lee {pages} paginas",
+    paceLabelUnit: "pag/min",
+    minutesUnit: "min",
+    pagesUnit: "pag",
+    untitled: "Sin titulo",
+    noQuotes: "No hay citas aun.",
+    noUploads: "Sin subidas aun.",
+    daysUnit: "dias"
+  }
 };
+
+const state = {
+  books: {},
+  activeBookId: null,
+  sessions: [],
+  quotes: [],
+  timer: {
+    running: false,
+    mode: "sprint",
+    sprintMins: 8,
+    startMs: 0,
+    elapsedMs: 0,
+    intervalId: null,
+    bell: false,
+    paused: false
+  },
+  drive: {
+    token: null,
+    fileId: null,
+    lastSyncISO: null,
+    lastPullISO: null,
+    autoMins: 1,
+    syncLog: [],
+    expiresAt: 0
+  },
+  settings: {
+    lang: "en-GB"
+  }
+};
+
+let _tokenClient = null;
+let _driveAutoId = null;
+let _ocrState = null;
+let _pendingNewCoverData = "";
+let _authResolved = false;
+let _authFallbackId = null;
 
 function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
 function todayKey(d=new Date()){ return d.toISOString().slice(0,10); }
 function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
 function fmt(n){ return Number.isFinite(n) ? n : 0; }
 
-function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function t(key, vars){
+  const lang = state.settings.lang || "en-GB";
+  const dict = I18N[lang] || I18N["en-GB"];
+  let str = dict[key] || I18N["en-GB"][key] || key;
+  if(vars){
+    for(const k of Object.keys(vars)){
+      str = str.replace(`{${k}}`, vars[k]);
+    }
+  }
+  return str;
+}
+
+function applyI18n(){
+  document.documentElement.lang = state.settings.lang || "en-GB";
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+}
+
+function setLanguage(lang){
+  state.settings.lang = lang;
+  applyI18n();
+  renderAll();
+  save();
+}
+
+function save(){
+  const snapshot = JSON.parse(JSON.stringify(state));
+  if(snapshot.drive){
+    snapshot.drive.token = null;
+    snapshot.drive.expiresAt = 0;
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+}
 function load(){
   const raw = localStorage.getItem(STORAGE_KEY);
   if(!raw) return;
   try{
     const data = JSON.parse(raw);
     Object.assign(state, data);
-  }catch(_){}
+  }catch(_){
+    return;
+  }
+  state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0 }, state.drive || {});
+  state.drive.token = null;
+  state.drive.expiresAt = 0;
+  state.settings = Object.assign({ lang:"en-GB" }, state.settings || {});
+  state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
+  if(!state.books) state.books = {};
+}
+
+function normalizeBooks(){
+  for(const id of Object.keys(state.books || {})){
+    const b = state.books[id];
+    if(!b.title) b.title = t("untitled");
+    b.author = b.author || "";
+    b.publisher = b.publisher || "";
+    b.edition = b.edition || "";
+    b.coverData = b.coverData || "";
+    b.rating = b.rating || "";
+    if(b.totalPages && (b.currentPage || 0) >= b.totalPages && !b.finishedAt){
+      b.finishedAt = new Date().toISOString();
+    }
+  }
 }
 
 function ensureDefaultBook(){
@@ -34,13 +528,75 @@ function ensureDefaultBook(){
     state.activeBookId = ids[0];
     return;
   }
-  // create a placeholder book
   const id = uid();
-  state.books[id] = { id, title:"Mi libro", totalPages:300, currentPage:0, createdAt:new Date().toISOString() };
+  state.books[id] = {
+    id,
+    title: t("untitled"),
+    author: "",
+    publisher: "",
+    edition: "",
+    totalPages: 300,
+    currentPage: 0,
+    createdAt: new Date().toISOString(),
+    coverData: "",
+    rating: "",
+    finishedAt: null
+  };
   state.activeBookId = id;
 }
 
+
+
 function activeBook(){ return state.books[state.activeBookId]; }
+
+// ---------- UI Helpers ----------
+function showToast(msg){
+  const toast = $("toast");
+  toast.textContent = msg;
+  toast.classList.add("show");
+  setTimeout(()=>toast.classList.remove("show"), 2400);
+}
+
+function setAuthGate(show, mode = "login"){
+  const gate = $("authGate");
+  const title = gate.querySelector("h2");
+  const copy = gate.querySelector(".authCopy");
+  const btn = $("authSignIn");
+  if(show){
+    document.body.classList.add("auth");
+    gate.classList.add("show");
+    gate.setAttribute("aria-hidden", "false");
+    if(mode === "checking"){
+      gate.classList.add("checking");
+      title.textContent = t("authCheckingTitle");
+      copy.textContent = t("authCheckingCopy");
+      btn.disabled = true;
+    }else{
+      gate.classList.remove("checking");
+      applyI18n();
+      btn.disabled = false;
+    }
+  }else{
+    document.body.classList.remove("auth");
+    gate.classList.remove("show");
+    gate.setAttribute("aria-hidden", "true");
+    gate.classList.remove("checking");
+    btn.disabled = false;
+  }
+}
+
+function formatDateTime(iso){
+  if(!iso) return "—";
+  const dt = new Date(iso);
+  return new Intl.DateTimeFormat(state.settings.lang || "en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(dt);
+}
+
+function formatPace(pace){
+  return pace > 0 ? `${pace.toFixed(2)} ${t("paceLabelUnit")}` : "—";
+}
 
 // ---------- Timer ----------
 function formatMMSS(ms){
@@ -59,7 +615,7 @@ function beep(){
     o.frequency.value = 880; g.gain.value = 0.03;
     o.start();
     setTimeout(()=>{ o.stop(); ctx.close(); }, 180);
-  }catch(_){}
+  }catch(_){ }
 }
 
 function startTimer(){
@@ -88,18 +644,18 @@ function startTimer(){
       if(remaining <= 0 && !state.timer.bell){
         state.timer.bell = true;
         beep();
-        $("timerHint").textContent = "Sprint completo ✅ Puedes seguir (hyperfocus).";
+        $("timerHint").textContent = t("timerSprintDone");
         $("hyper").disabled = false;
       }
       if(!state.timer.bell){
         $("timerBig").textContent = formatMMSS(remaining);
-        $("timerHint").textContent = "Sólo empieza. Al final decides.";
+        $("timerHint").textContent = t("timerSprintHint");
       }else{
         $("timerBig").textContent = "+" + formatMMSS(-remaining);
       }
     }else{
       $("timerBig").textContent = formatMMSS(state.timer.elapsedMs);
-      $("timerHint").textContent = "Flow: sin límite. Tú mandas.";
+      $("timerHint").textContent = t("timerFlowHint");
     }
   };
 
@@ -112,28 +668,36 @@ function togglePause(){
   if(!state.timer.running) return;
   state.timer.paused = !state.timer.paused;
   if(state.timer.paused){
-    $("pause").textContent = "Reanudar";
-    $("timerHint").textContent = "En pausa.";
+    $("pause").textContent = t("resume");
+    $("timerHint").textContent = t("timerPaused");
   }else{
-    // rebase startMs so elapsed continues correctly
     state.timer.startMs = Date.now() - state.timer.elapsedMs;
-    $("pause").textContent = "Pausa";
+    $("pause").textContent = t("pause");
   }
   save();
 }
 
 function hyperfocus(){
   state.timer.mode = "flow";
-  $("mode").value = "flow";
+  $("mode").value = "open";
   $("hyper").disabled = true;
-  $("timerHint").textContent = "Hyperfocus 🔥 Sigue. Cierra sesión cuando quieras.";
+  $("timerHint").textContent = t("timerHyperHint");
   save();
+}
+
+function getPagesRead(){
+  if($("pagesModeRange").checked){
+    const from = Number($("fromPage").value || activeBook().currentPage || 0);
+    const to = Number($("toPage").value || 0);
+    if(!to) return null;
+    return Math.max(0, to - from + 1);
+  }
+  return Number($("pagesRead").value || 0);
 }
 
 function finishSession(){
   if(!state.timer.running) return;
 
-  // stop
   state.timer.running = false;
   state.timer.paused = false;
   if(state.timer.intervalId){
@@ -145,26 +709,46 @@ function finishSession(){
   $("pause").disabled = true;
   $("finish").disabled = true;
   $("hyper").disabled = true;
-  $("pause").textContent = "Pausa";
+  $("pause").textContent = t("pause");
 
   const book = activeBook();
   const endISO = new Date().toISOString();
   const startISO = new Date(state.timer.startMs).toISOString();
   const mins = Math.max(1, Math.round(state.timer.elapsedMs / 60000));
 
-  const pages = Number($("pagesRead").value || 0);
-  // Update current page (assuming "sin blancas" consistently)
-  if(Number.isFinite(pages) && pages > 0){
-    book.currentPage = Math.min(book.totalPages, (book.currentPage || 0) + pages);
+  const pages = getPagesRead();
+  if(pages === null){
+    alert(t("sessionNeedToPage"));
+    return;
   }
 
-  state.sessions.push({ id: uid(), bookId: book.id, startISO, endISO, mins, pages: Math.max(0, pages) });
+  if(Number.isFinite(pages) && pages > 0){
+    if($("pagesModeRange").checked){
+      const to = Number($("toPage").value || book.currentPage || 0);
+      book.currentPage = clamp(to, 0, book.totalPages || to);
+    }else{
+      book.currentPage = Math.min(book.totalPages, (book.currentPage || 0) + pages);
+    }
+  }
+  if(book.totalPages && book.currentPage >= book.totalPages && !book.finishedAt){
+    book.finishedAt = new Date().toISOString();
+  }
+
+  state.sessions.push({ id: uid(), bookId: book.id, startISO, endISO, mins, pages: Math.max(0, pages || 0) });
 
   $("pagesRead").value = "";
+  $("fromPage").value = "";
+  $("toPage").value = "";
   $("timerBig").textContent = "GG";
-  $("timerHint").textContent = "Sesión guardada ✅ ¿Otra mini-sesión?";
+  $("timerHint").textContent = t("sessionSaved");
   save();
   renderAll();
+}
+
+function togglePagesMode(){
+  const rangeOn = $("pagesModeRange").checked;
+  $("rangeInputs").classList.toggle("hidden", !rangeOn);
+  $("countInputs").classList.toggle("hidden", rangeOn);
 }
 
 // ---------- Stats / ETA ----------
@@ -172,16 +756,14 @@ function sessionsForBook(bookId){
   return state.sessions.filter(s => s.bookId === bookId);
 }
 
-// weighted average pace using last N sessions with pages>0
 function averagePace(bookId, N=10){
   const arr = sessionsForBook(bookId).filter(s => (s.pages||0) > 0 && (s.mins||0) > 0);
   if(!arr.length) return 0;
   const last = arr.slice(-N);
-  // exponential weights (recent heavier)
   let wSum = 0, pSum = 0;
   for(let i=0;i<last.length;i++){
     const s = last[i];
-    const w = Math.pow(1.18, i); // increasing
+    const w = Math.pow(1.18, i);
     wSum += w;
     pSum += w * (s.pages / s.mins);
   }
@@ -192,14 +774,14 @@ function computeETA(bookId){
   const b = state.books[bookId];
   if(!b || !b.totalPages) return "—";
   const remaining = Math.max(0, (b.totalPages||0) - (b.currentPage||0));
-  if(remaining === 0) return "Terminado 🎉";
+  if(remaining === 0) return t("etaFinished");
   const pace = averagePace(bookId);
-  if(pace <= 0) return "Necesito 1 sesión con páginas";
+  if(pace <= 0) return t("etaNeedPace");
   const mins = remaining / pace;
   const hours = mins / 60;
-  if(hours < 2) return `~${Math.round(mins)} min`;
+  if(hours < 2) return `~${Math.round(mins)} ${t("minutesUnit")}`;
   if(hours < 24) return `~${hours.toFixed(1)} h`;
-  return `~${(hours/24).toFixed(1)} días`;
+  return `~${(hours/24).toFixed(1)} ${t("daysUnit")}`;
 }
 
 function rangeDays(){
@@ -214,10 +796,9 @@ function inRange(iso, days){
 }
 
 function aggregateDaily(bookId, days){
-  // returns arrays: labels (YYYY-MM-DD), pagesByDay, minsByDay
-  const map = new Map(); // day -> {pages,mins}
+  const map = new Map();
   for(const s of state.sessions){
-    if(s.bookId !== bookId) continue;
+    if(bookId && s.bookId !== bookId) continue;
     if(!inRange(s.endISO || s.startISO, days)) continue;
     const day = (s.endISO || s.startISO).slice(0,10);
     const cur = map.get(day) || {pages:0, mins:0};
@@ -225,7 +806,6 @@ function aggregateDaily(bookId, days){
     cur.mins += (s.mins||0);
     map.set(day, cur);
   }
-  // build continuous days list from oldest->today
   const labels = [];
   const pagesArr = [];
   const minsArr = [];
@@ -235,7 +815,7 @@ function aggregateDaily(bookId, days){
     const dt = new Date(now.getTime() - i*24*3600*1000);
     const key = dt.toISOString().slice(0,10);
     const v = map.get(key) || {pages:0, mins:0};
-    labels.push(key.slice(5)); // MM-DD
+    labels.push(key.slice(5));
     pagesArr.push(v.pages);
     minsArr.push(v.mins);
   }
@@ -252,13 +832,24 @@ function aggregateGlobal(days){
   return {pages, mins};
 }
 
-// ---------- Charts (simple bar charts, offline-friendly) ----------
+function aggregateBookInRange(bookId, days){
+  let pages=0, mins=0, sessions=0;
+  for(const s of state.sessions){
+    if(s.bookId !== bookId) continue;
+    if(!inRange(s.endISO || s.startISO, days)) continue;
+    pages += (s.pages||0);
+    mins += (s.mins||0);
+    sessions += 1;
+  }
+  return {pages, mins, sessions};
+}
+
+// ---------- Charts ----------
 function drawBarChart(canvas, labels, values){
   const ctx = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0,0,W,H);
 
-  // background
   ctx.fillStyle = "#0c0c0d";
   ctx.fillRect(0,0,W,H);
 
@@ -267,7 +858,6 @@ function drawBarChart(canvas, labels, values){
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
 
-  // axes
   ctx.strokeStyle = "#2a2b2e";
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -276,7 +866,6 @@ function drawBarChart(canvas, labels, values){
   ctx.lineTo(padL+plotW, padT+plotH);
   ctx.stroke();
 
-  // bars
   const n = values.length;
   const gap = 1;
   const barW = Math.max(1, Math.floor(plotW / n) - gap);
@@ -293,12 +882,10 @@ function drawBarChart(canvas, labels, values){
   }
   ctx.globalAlpha = 1;
 
-  // y label (max)
   ctx.fillStyle = "#a8a8a8";
   ctx.font = "12px system-ui";
   ctx.fillText(String(maxV), 6, padT+12);
 
-  // x labels (sparse)
   const step = Math.ceil(n / 6);
   ctx.fillStyle = "#a8a8a8";
   ctx.font = "11px system-ui";
@@ -308,19 +895,87 @@ function drawBarChart(canvas, labels, values){
   }
 }
 
-function renderHistory(){
-  const hist = [...state.sessions].slice(-25).reverse();
-  $("history").innerHTML = hist.map(s=>{
+function downloadCanvas(canvas, filename){
+  const url = canvas.toDataURL("image/png");
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+}
+
+// ---------- Dashboard + Stats ----------
+function calcStreak(){
+  const days = new Set();
+  for(const s of state.sessions){
     const day = (s.endISO || s.startISO).slice(0,10);
-    const b = state.books[s.bookId];
-    const title = b ? b.title : "(libro borrado)";
-    return `
-      <div class="item">
-        <b>${day} · ${title}</b>
-        <div class="muted small">${s.mins||0} min · ${s.pages||0} pág</div>
-      </div>
-    `;
-  }).join("") || `<div class="muted small">Aún no hay sesiones.</div>`;
+    days.add(day);
+  }
+  let streak = 0;
+  const now = new Date();
+  for(;;){
+    const key = new Date(now.getTime() - streak*24*3600*1000).toISOString().slice(0,10);
+    if(days.has(key)){
+      streak += 1;
+    }else{
+      break;
+    }
+  }
+  return streak;
+}
+
+function renderDashboard(){
+  const days = rangeDays();
+  const {pages, mins} = aggregateGlobal(days);
+  const xp = Math.round(pages * 3 + mins);
+  const level = Math.floor(xp / 500) + 1;
+  const streak = calcStreak();
+
+  $("level").textContent = String(level);
+  $("xp").textContent = String(xp);
+  $("streak").textContent = `${streak} ${t("dayStreak")}`;
+
+  const today = todayKey();
+  let todayPages = 0;
+  for(const s of state.sessions){
+    const day = (s.endISO || s.startISO).slice(0,10);
+    if(day === today) todayPages += (s.pages || 0);
+  }
+  if(todayPages >= 10){
+    $("dailyQuest").textContent = t("dailyQuestDone");
+  }else{
+    $("dailyQuest").textContent = t("dailyQuestGoal", { pages: String(10 - todayPages) });
+  }
+
+  renderActiveBookCard();
+}
+
+function renderActiveBookCard(){
+  const b = activeBook();
+  if(!b){
+    $("activeBookCard").innerHTML = "";
+    return;
+  }
+  const pct = b.totalPages ? Math.round((b.currentPage / b.totalPages) * 100) : 0;
+  const pace = averagePace(b.id);
+  const eta = computeETA(b.id);
+  const cover = b.coverData
+    ? `<img class="cover" src="${b.coverData}" alt="${b.title}" />`
+    : `<div class="cover"></div>`;
+  const authorLine = b.author ? `<div class="itemMeta">${b.author}</div>` : "";
+
+  $("activeBookCard").innerHTML = `
+    ${cover}
+    <div>
+      <div class="itemTitle">${b.title || t("untitled")}</div>
+      ${authorLine}
+      <div class="itemMeta">${b.currentPage || 0}/${b.totalPages || 0} (${pct}%)</div>
+      <div class="itemMeta">${t("storyPace")}: ${formatPace(pace)}</div>
+      <div class="itemMeta">${t("storyEta")}: ${eta}</div>
+    </div>
+  `;
+
+  const finished = b.totalPages && (b.currentPage || 0) >= b.totalPages;
+  $("shareFinish").disabled = !finished;
 }
 
 function refreshBookSelect(){
@@ -335,7 +990,11 @@ function refreshBookSelect(){
 
 function renderActiveBook(){
   const b = activeBook();
+  if(!b) return;
   $("editTitle").value = b.title || "";
+  $("editAuthor").value = b.author || "";
+  $("editPublisher").value = b.publisher || "";
+  $("editEdition").value = b.edition || "";
   $("editTotal").value = b.totalPages || 0;
   $("editCurrent").value = b.currentPage || 0;
 
@@ -343,7 +1002,7 @@ function renderActiveBook(){
   $("progress").textContent = `${b.currentPage||0}/${b.totalPages||0} (${pct}%)`;
 
   const pace = averagePace(b.id);
-  $("pace").textContent = pace > 0 ? `${pace.toFixed(2)} pág/min` : "—";
+  $("pace").textContent = formatPace(pace);
   $("eta").textContent = computeETA(b.id);
 
   const days = rangeDays();
@@ -353,6 +1012,10 @@ function renderActiveBook(){
   const agg = aggregateDaily(b.id, days);
   drawBarChart($("chartPages"), agg.labels, agg.pagesArr);
   drawBarChart($("chartMins"), agg.labels, agg.minsArr);
+
+  const aggAll = aggregateDaily(null, days);
+  drawBarChart($("chartAllPages"), aggAll.labels, aggAll.pagesArr);
+  drawBarChart($("chartAllMins"), aggAll.labels, aggAll.minsArr);
 }
 
 function renderGlobal(){
@@ -372,32 +1035,81 @@ function renderGlobal(){
   $("minsRange").textContent = String(mins);
 }
 
+function renderQuotes(){
+  const bookId = state.activeBookId;
+  const list = state.quotes.filter(q => q.bookId === bookId).slice().reverse();
+  $("quotesList").innerHTML = list.map(q => {
+    const meta = [q.author, q.page ? `${t("quoteSharePage")}: ${q.page}` : ""].filter(Boolean).join(" · ");
+    return `
+      <div class="item">
+        <div class="itemTitle">${q.text}</div>
+        <div class="itemMeta">${meta}</div>
+        <div class="itemActions">
+          <button class="btn" data-quote-id="${q.id}" data-action="copy">${t("quoteCopy")}</button>
+          <button class="btn danger" data-quote-id="${q.id}" data-action="delete">${t("quoteDelete")}</button>
+        </div>
+      </div>
+    `;
+  }).join("") || `<div class="muted small">${t("noQuotes")}</div>`;
+}
+
+function renderDriveLog(){
+  $("lastPull").textContent = formatDateTime(state.drive.lastPullISO);
+  $("lastPush").textContent = formatDateTime(state.drive.lastSyncISO);
+  const log = state.drive.syncLog || [];
+  $("driveSyncLog").innerHTML = log.slice().reverse().map(iso => {
+    return `<div class="item"><div class="itemTitle">${formatDateTime(iso)}</div></div>`;
+  }).join("") || `<div class="muted small">${t("noUploads")}</div>`;
+}
+
 function renderAll(){
   refreshBookSelect();
+  renderDashboard();
   renderActiveBook();
   renderGlobal();
-  renderHistory();
+  renderQuotes();
+  renderDriveLog();
   save();
 }
 
 // ---------- CRUD Books ----------
 function addBook(){
-  const title = $("newTitle").value.trim() || "Sin título";
+  const title = $("newTitle").value.trim() || t("untitled");
+  const author = $("newAuthor").value.trim();
+  const publisher = $("newPublisher").value.trim();
+  const edition = $("newEdition").value.trim();
   const totalPages = Number($("newTotal").value || 0);
   const currentPage = Number($("newCurrent").value || 0);
 
   if(!totalPages || totalPages < 1){
-    alert("Pon un total de páginas (sin blancas).");
+    alert(t("alertNeedPages"));
     return;
   }
 
   const id = uid();
-  state.books[id] = { id, title, totalPages, currentPage: clamp(currentPage,0,totalPages), createdAt:new Date().toISOString() };
+  state.books[id] = {
+    id,
+    title,
+    author,
+    publisher,
+    edition,
+    totalPages,
+    currentPage: clamp(currentPage,0,totalPages),
+    createdAt: new Date().toISOString(),
+    coverData: _pendingNewCoverData || "",
+    rating: "",
+    finishedAt: null
+  };
   state.activeBookId = id;
 
   $("newTitle").value = "";
+  $("newAuthor").value = "";
+  $("newPublisher").value = "";
+  $("newEdition").value = "";
   $("newTotal").value = "";
   $("newCurrent").value = "";
+  $("newCover").value = "";
+  _pendingNewCoverData = "";
 
   save();
   renderAll();
@@ -405,16 +1117,24 @@ function addBook(){
 
 function saveActiveBook(){
   const b = activeBook();
-  b.title = $("editTitle").value.trim() || b.title || "Sin título";
+  b.title = $("editTitle").value.trim() || b.title || t("untitled");
+  b.author = $("editAuthor").value.trim() || "";
+  b.publisher = $("editPublisher").value.trim() || "";
+  b.edition = $("editEdition").value.trim() || "";
   b.totalPages = Number($("editTotal").value || b.totalPages || 0);
   b.currentPage = clamp(Number($("editCurrent").value || b.currentPage || 0), 0, b.totalPages || 0);
+  if(b.totalPages && b.currentPage >= b.totalPages && !b.finishedAt){
+    b.finishedAt = new Date().toISOString();
+  }
   save();
   renderAll();
 }
 
 function deleteActiveBook(){
   const b = activeBook();
-  if(!confirm(`¿Eliminar "${b.title}"? (no borra sesiones, pero quedarán como “libro borrado”)`)) return;
+  if(!confirm(t("confirmDeleteBook", { title: b.title }))){
+    return;
+  }
   delete state.books[b.id];
 
   const ids = Object.keys(state.books);
@@ -424,84 +1144,306 @@ function deleteActiveBook(){
   renderAll();
 }
 
-// ---------- Manual Sync ----------
-function exportJSON(){
-  const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `bookquest_${todayKey()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function importJSON(file){
+function handleCoverInput(input, book){
+  const file = input.files && input.files[0];
+  if(!file) return;
   const reader = new FileReader();
   reader.onload = () => {
-    try{
-      const data = JSON.parse(reader.result);
-      if(!data || typeof data !== "object") throw new Error("bad");
-      Object.assign(state, data);
-      ensureDefaultBook();
-      save();
-      renderAll();
-      alert("Importado ✅");
-    }catch(_){
-      alert("No pude importar ese JSON.");
-    }
+    book.coverData = reader.result;
+    save();
+    renderAll();
   };
-  reader.readAsText(file);
+  reader.readAsDataURL(file);
 }
 
-// ---------- Drive Sync (GIS token model + Drive REST) ----------
+function handleNewCoverInput(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    _pendingNewCoverData = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ---------- Quotes ----------
+function addQuote(){
+  const text = $("quoteText").value.trim();
+  if(!text) return;
+  const quote = {
+    id: uid(),
+    bookId: state.activeBookId,
+    text,
+    author: $("quoteAuthor").value.trim(),
+    page: $("quotePage").value.trim(),
+    createdAt: new Date().toISOString()
+  };
+  state.quotes.push(quote);
+  $("quoteText").value = "";
+  $("quoteAuthor").value = "";
+  $("quotePage").value = "";
+  save();
+  renderAll();
+}
+
+function handleQuoteActions(e){
+  const btn = e.target.closest("button[data-quote-id]");
+  if(!btn) return;
+  const id = btn.dataset.quoteId;
+  const action = btn.dataset.action;
+  const idx = state.quotes.findIndex(q => q.id === id);
+  if(idx === -1) return;
+  if(action === "delete"){
+    state.quotes.splice(idx, 1);
+    save();
+    renderAll();
+    return;
+  }
+  if(action === "copy"){
+    navigator.clipboard.writeText(state.quotes[idx].text).catch(()=>{});
+    showToast(t("toastUpdated"));
+  }
+}
+
+function drawQuoteImage(){
+  const text = $("quoteText").value.trim();
+  if(!text) return;
+  const b = activeBook();
+  const canvas = $("quoteCanvas");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  ctx.clearRect(0,0,W,H);
+  const gradient = ctx.createLinearGradient(0,0,W,H);
+  gradient.addColorStop(0, "#111119");
+  gradient.addColorStop(1, "#1b1c24");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "600 44px system-ui";
+  ctx.fillText(t("quoteShareLabel"), 80, 140);
+
+  ctx.font = "700 52px system-ui";
+  wrapText(ctx, `“${text}”`, 80, 220, W - 160, 64);
+
+  ctx.fillStyle = "#b6b6bd";
+  ctx.font = "500 34px system-ui";
+  const meta = [
+    b ? `${t("quoteShareBook")}: ${b.title}` : "",
+    $("quoteAuthor").value.trim() ? $("quoteAuthor").value.trim() : "",
+    $("quotePage").value.trim() ? `${t("quoteSharePage")}: ${$("quotePage").value.trim()}` : ""
+  ].filter(Boolean).join(" · ");
+  wrapText(ctx, meta, 80, H - 220, W - 160, 44);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 28px system-ui";
+  ctx.fillText(t("quoteShareApp"), 80, H - 100);
+
+  const url = canvas.toDataURL("image/png");
+  $("quotePreview").src = url;
+  $("quotePreview").classList.add("show");
+  $("previewQuote").disabled = false;
+  $("downloadQuote").disabled = false;
+}
+
+// ---------- Story Generation ----------
+function wrapText(ctx, text, x, y, maxWidth, lineHeight){
+  const words = text.split(" ");
+  let line = "";
+  for(let i=0;i<words.length;i++){
+    const test = line + words[i] + " ";
+    const w = ctx.measureText(test).width;
+    if(w > maxWidth && i > 0){
+      ctx.fillText(line.trim(), x, y);
+      line = words[i] + " ";
+      y += lineHeight;
+    }else{
+      line = test;
+    }
+  }
+  ctx.fillText(line.trim(), x, y);
+}
+
+function drawStory(scope){
+  const canvas = $("storyCanvas");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  ctx.clearRect(0,0,W,H);
+  const gradient = ctx.createLinearGradient(0,0,W,H);
+  gradient.addColorStop(0, "#0e0f14");
+  gradient.addColorStop(1, "#1d1f2a");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.beginPath();
+  ctx.arc(W - 120, 140, 200, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 56px system-ui";
+
+  let title = t("storyTitleOverall");
+  if(scope === "book") title = t("storyTitleBook");
+  if(scope === "year") title = t("storyTitleYear");
+  ctx.fillText(title, 80, 140);
+
+  ctx.font = "400 30px system-ui";
+  ctx.fillStyle = "#c9c9d2";
+  ctx.fillText(new Date().getFullYear(), 80, 190);
+
+  const stats = [];
+  if(scope === "book"){
+    const b = activeBook();
+    const days = rangeDays();
+    const bookAgg = aggregateBookInRange(b.id, days);
+    const pace = averagePace(b.id);
+    stats.push([t("storyBook"), b.title]);
+    stats.push([t("storyPages"), `${b.currentPage || 0}/${b.totalPages || 0}`]);
+    stats.push([t("storyProgress"), `${b.totalPages ? Math.round((b.currentPage / b.totalPages) * 100) : 0}%`]);
+    stats.push([t("storyMinutes"), `${bookAgg.mins}`]);
+    stats.push([t("storySessions"), `${bookAgg.sessions}`]);
+    stats.push([t("storyPace"), pace > 0 ? `${pace.toFixed(2)} ${t("paceLabelUnit")}` : "—"]);
+    stats.push([t("storyEta"), computeETA(b.id)]);
+  }else{
+    const days = scope === "year" ? 365 : rangeDays();
+    const {pages, mins} = aggregateGlobal(days);
+    const hours = mins / 60;
+    const finished = Object.values(state.books).filter(b => b.finishedAt && inRange(b.finishedAt, days)).length;
+    const sessionsCount = state.sessions.filter(s => inRange(s.endISO || s.startISO, days)).length;
+    stats.push([t("storyPages"), `${pages}`]);
+    stats.push([t("storyMinutes"), `${mins}`]);
+    stats.push([t("storyHours"), `${hours.toFixed(1)}`]);
+    stats.push([t("storyBooks"), `${Object.keys(state.books).length}`]);
+    stats.push([t("storyFinished"), `${finished}`]);
+    stats.push([t("storySessions"), `${sessionsCount}`]);
+  }
+
+  let y = 320;
+  ctx.font = "600 36px system-ui";
+  stats.forEach(([label, value]) => {
+    ctx.fillStyle = "#8f90a0";
+    ctx.fillText(label, 80, y);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(String(value), 420, y);
+    y += 70;
+  });
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 30px system-ui";
+  ctx.fillText(t("storyApp"), 80, H - 100);
+
+  const url = canvas.toDataURL("image/png");
+  $("storyPreview").src = url;
+  $("storyPreview").classList.add("show");
+  $("downloadStory").disabled = false;
+}
+
+function drawFinishStory(){
+  const b = activeBook();
+  if(!b) return;
+  const rating = $("finishRating").value;
+  b.rating = rating;
+  save();
+  const canvas = $("finishCanvas");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  ctx.clearRect(0,0,W,H);
+  const gradient = ctx.createLinearGradient(0,0,W,H);
+  gradient.addColorStop(0, "#0b0c10");
+  gradient.addColorStop(1, "#202334");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 60px system-ui";
+  ctx.fillText(`${t("finishShareHeadline")}!`, 80, 140);
+
+  ctx.font = "600 44px system-ui";
+  wrapText(ctx, b.title, 80, 230, W - 160, 60);
+
+  ctx.fillStyle = "#b6b6bd";
+  ctx.font = "500 32px system-ui";
+  if(b.author){
+    ctx.fillText(b.author, 80, 320);
+  }
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "600 36px system-ui";
+  ctx.fillText(`${t("storyPages")}: ${b.totalPages || 0}`, 80, 420);
+
+  if(rating){
+    ctx.fillText(`${t("finishShareRating")}: ${rating}/5`, 80, 490);
+  }
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 30px system-ui";
+  ctx.fillText(t("storyApp"), 80, H - 100);
+
+  const url = canvas.toDataURL("image/png");
+  $("finishPreview").src = url;
+  $("finishPreview").classList.add("show");
+  $("finishDownload").disabled = false;
+}
+
+// ---------- Drive Sync ----------
 function setDriveUI(connected){
   $("drivePull").disabled = !connected;
   $("drivePush").disabled = !connected;
-  $("driveStatus").textContent = connected
-    ? "Conectado. Puedes traer/guardar."
-    : "No conectado.";
+  $("driveStatus").textContent = connected ? t("statusConnected") : t("statusNotSigned");
+}
+
+function driveClientId(){
+  return (window.BOOKQUEST_CONFIG && window.BOOKQUEST_CONFIG.googleClientId) || DEFAULT_CLIENT_ID;
 }
 
 function driveTokenClient(){
-  // You must replace this with your OAuth Web Client ID
-  const CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
-  // appDataFolder scope for Drive application data :contentReference[oaicite:4]{index=4}
-  const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
-
   if(!window.google || !google.accounts || !google.accounts.oauth2){
-    alert("Google Identity Services no cargó.");
     return null;
   }
+  if(_tokenClient) return _tokenClient;
+  _tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: driveClientId(),
+    scope: "https://www.googleapis.com/auth/drive.appdata",
+    callback: () => {}
+  });
+  return _tokenClient;
+}
 
-  return google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: SCOPE,
-    callback: (resp) => {
+function ensureDriveToken(interactive){
+  if(state.drive.token && Date.now() < (state.drive.expiresAt || 0)){
+    return Promise.resolve(true);
+  }
+  return new Promise(resolve => {
+    const client = driveTokenClient();
+    if(!client){
+      resolve(false);
+      return;
+    }
+    client.callback = (resp) => {
       if(resp && resp.access_token){
         state.drive.token = resp.access_token;
+        state.drive.expiresAt = Date.now() + (resp.expires_in || 3600) * 1000 - 60000;
         save();
         setDriveUI(true);
-        $("driveStatus").textContent = "Conectado ✅ (token activo)";
+        resolve(true);
       }else{
-        $("driveStatus").textContent = "No se obtuvo token.";
+        resolve(false);
       }
-    }
+    };
+    client.requestAccessToken({ prompt: interactive ? "consent" : "" });
   });
 }
 
-let _tokenClient = null;
-
-function driveSignIn(){
-  if(!_tokenClient) _tokenClient = driveTokenClient();
-  if(!_tokenClient) return;
-  _tokenClient.requestAccessToken({prompt: "consent"});
-}
-
 async function driveFindFileId(){
-  // List files in appDataFolder space :contentReference[oaicite:5]{index=5}
   const q = encodeURIComponent(`name='${DRIVE_FILENAME}'`);
-  const url =
-    `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime)`;
+  const url = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime)`;
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${state.drive.token}` }
@@ -512,45 +1454,63 @@ async function driveFindFileId(){
   return f ? f.id : null;
 }
 
+function sanitizeStateForDrive(){
+  const payload = JSON.parse(JSON.stringify(state));
+  if(payload.drive){
+    payload.drive.token = null;
+    payload.drive.expiresAt = 0;
+  }
+  return payload;
+}
+
 async function drivePull(){
   try{
-    if(!state.drive.token) return;
+    const ok = await ensureDriveToken(false);
+    if(!ok) return;
 
     let fileId = state.drive.fileId || await driveFindFileId();
     if(!fileId){
-      $("driveStatus").textContent = "No hay archivo en Drive todavía.";
+      $("driveStatus").textContent = t("statusNoFile");
       return;
     }
 
-    // Download file contents with alt=media :contentReference[oaicite:6]{index=6}
     const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${state.drive.token}` } });
     if(!res.ok) throw new Error("files.get alt=media failed");
     const text = await res.text();
     const data = JSON.parse(text);
 
+    const token = state.drive.token;
+    const expiresAt = state.drive.expiresAt;
     Object.assign(state, data);
-    state.drive.fileId = fileId;
-    state.drive.lastSyncISO = new Date().toISOString();
+    state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0 }, state.drive || {}, { token, expiresAt, fileId });
+    state.settings = Object.assign({ lang:\"en-GB\" }, state.settings || {});
+    state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
+    normalizeBooks();
+    state.drive.lastPullISO = new Date().toISOString();
 
     ensureDefaultBook();
+    applyI18n();
+    $(\"appLang\").value = state.settings.lang || \"en-GB\";
+    $(\"driveAuto\").value = String(state.drive.autoMins || 1);
     save();
     renderAll();
-    $("driveStatus").textContent = "Traído de Drive ✅";
-  }catch(e){
-    $("driveStatus").textContent = "Error al traer de Drive.";
+    setDriveUI(true);
+    $("driveStatus").textContent = t("statusPulled");
+  }catch(_){
+    $("driveStatus").textContent = t("statusPullError");
   }
 }
 
 async function drivePush(){
   try{
-    if(!state.drive.token) return;
+    const ok = await ensureDriveToken(false);
+    if(!ok) return;
 
     let fileId = state.drive.fileId || await driveFindFileId();
-    const body = JSON.stringify(state);
+    const body = JSON.stringify(sanitizeStateForDrive());
 
     if(!fileId){
-      // Create new file in appDataFolder using multipart upload :contentReference[oaicite:7]{index=7}
       const boundary = "-------bookquestboundary" + Math.random().toString(16).slice(2);
       const metadata = {
         name: DRIVE_FILENAME,
@@ -582,7 +1542,6 @@ async function drivePush(){
       fileId = data.id;
       state.drive.fileId = fileId;
     }else{
-      // Update existing file content (media upload) :contentReference[oaicite:8]{index=8}
       const res = await fetch(
         `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
         {
@@ -597,24 +1556,250 @@ async function drivePush(){
       if(!res.ok) throw new Error("update media failed");
     }
 
-    state.drive.lastSyncISO = new Date().toISOString();
+    const now = new Date().toISOString();
+    state.drive.lastSyncISO = now;
+    state.drive.syncLog = (state.drive.syncLog || []).slice(-49);
+    state.drive.syncLog.push(now);
     save();
-    $("driveStatus").textContent = "Guardado en Drive ✅";
-  }catch(e){
-    $("driveStatus").textContent = "Error al guardar en Drive.";
+    renderDriveLog();
+    $("driveStatus").textContent = t("statusSaved");
+  }catch(_){
+    $("driveStatus").textContent = t("statusPushError");
   }
 }
 
-// ---------- PWA ----------
-function setupPWA(){
-  if("serviceWorker" in navigator){
-    navigator.serviceWorker.register("./service-worker.js").catch(()=>{});
+function scheduleDriveAuto(){
+  if(_driveAutoId){
+    clearInterval(_driveAutoId);
+    _driveAutoId = null;
   }
-  $("installHint").textContent = "Tip: en móvil, ‘Add to Home Screen’ para usarlo como app.";
+  const mins = Number(state.drive.autoMins || 0);
+  if(!mins) return;
+  _driveAutoId = setInterval(() => {
+    drivePush();
+  }, mins * 60000);
 }
 
-// ---------- Bind UI ----------
+function scheduleSilentSignIn(){
+  let attempts = 0;
+  if(_authFallbackId){
+    clearTimeout(_authFallbackId);
+    _authFallbackId = null;
+  }
+  _authResolved = false;
+  _authFallbackId = setTimeout(() => {
+    if(!_authResolved){
+      setAuthGate(true, "login");
+    }
+  }, 1200);
+  const timer = setInterval(() => {
+    attempts += 1;
+    if(window.google && google.accounts && google.accounts.oauth2){
+      clearInterval(timer);
+      handleAuthFlow(false);
+      return;
+    }
+    if(attempts >= 10){
+      clearInterval(timer);
+      if(!_authResolved){
+        setAuthGate(true, "login");
+        _authResolved = true;
+      }
+    }
+  }, 500);
+}
+
+async function handleAuthFlow(interactive){
+  if(interactive){
+    setAuthGate(true, "checking");
+  }
+  const ok = await ensureDriveToken(interactive);
+  _authResolved = true;
+  if(_authFallbackId){
+    clearTimeout(_authFallbackId);
+    _authFallbackId = null;
+  }
+  if(!ok){
+    setAuthGate(true, "login");
+    return;
+  }
+  setDriveUI(true);
+  setAuthGate(false);
+  await drivePull();
+  scheduleDriveAuto();
+}
+
+// ---------- Manual Sync ----------
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `bookquest_${todayKey()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importJSON(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(!data || typeof data !== "object") throw new Error("bad");
+      Object.assign(state, data);
+      normalizeBooks();
+      ensureDefaultBook();
+      applyI18n();
+      save();
+      renderAll();
+      showToast(t("toastImported"));
+    }catch(_){
+      alert(t("alertImportFail"));
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ---------- OCR ----------
+function openOcrModal(){
+  _ocrState = null;
+  $("ocrOverlay").classList.add("open");
+  $("ocrOverlay").setAttribute("aria-hidden", "false");
+  const ctx = $("ocrCanvas").getContext("2d");
+  ctx.clearRect(0,0,$("ocrCanvas").width,$("ocrCanvas").height);
+  $("quoteOcrStatus").textContent = "";
+}
+
+function closeOcrModal(){
+  $("ocrOverlay").classList.remove("open");
+  $("ocrOverlay").setAttribute("aria-hidden", "true");
+}
+
+function loadOcrImage(file){
+  const img = new Image();
+  img.onload = () => {
+    const canvas = $("ocrCanvas");
+    const ctx = canvas.getContext("2d");
+    const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+    const drawW = img.width * scale;
+    const drawH = img.height * scale;
+    const offsetX = (canvas.width - drawW) / 2;
+    const offsetY = (canvas.height - drawH) / 2;
+    ctx.clearRect(0,0,canvas.width, canvas.height);
+    ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+    _ocrState = { img, canvas, ctx, scale, offsetX, offsetY, rect: {x: offsetX, y: offsetY, w: drawW, h: drawH} };
+    drawOcrSelection();
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+function drawOcrSelection(){
+  if(!_ocrState) return;
+  const { ctx, canvas, img, scale, offsetX, offsetY, rect } = _ocrState;
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+  ctx.drawImage(img, offsetX, offsetY, img.width * scale, img.height * scale);
+  ctx.strokeStyle = "#00e0ff";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6,4]);
+  ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+  ctx.setLineDash([]);
+}
+
+function handleOcrPointerDown(e){
+  if(!_ocrState) return;
+  const rect = $("ocrCanvas").getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  _ocrState.dragging = true;
+  _ocrState.startX = x;
+  _ocrState.startY = y;
+  _ocrState.rect = { x, y, w: 0, h: 0 };
+  drawOcrSelection();
+}
+
+function handleOcrPointerMove(e){
+  if(!_ocrState || !_ocrState.dragging) return;
+  const rect = $("ocrCanvas").getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const w = x - _ocrState.startX;
+  const h = y - _ocrState.startY;
+  _ocrState.rect = {
+    x: w < 0 ? x : _ocrState.startX,
+    y: h < 0 ? y : _ocrState.startY,
+    w: Math.abs(w),
+    h: Math.abs(h)
+  };
+  drawOcrSelection();
+}
+
+function handleOcrPointerUp(){
+  if(!_ocrState) return;
+  _ocrState.dragging = false;
+}
+
+async function runOcr(){
+  if(!_ocrState){
+    showToast(t("toastOcrMissing"));
+    return;
+  }
+  if(!window.Tesseract){
+    showToast(t("toastOcrMissing"));
+    return;
+  }
+  showToast(t("toastOcrWorking"));
+  $("quoteOcrStatus").textContent = t("toastOcrWorking");
+  const { img, rect, scale, offsetX, offsetY } = _ocrState;
+  const sx = clamp((rect.x - offsetX) / scale, 0, img.width);
+  const sy = clamp((rect.y - offsetY) / scale, 0, img.height);
+  const sw = clamp(rect.w / scale, 1, img.width - sx);
+  const sh = clamp(rect.h / scale, 1, img.height - sy);
+  const crop = document.createElement("canvas");
+  crop.width = sw;
+  crop.height = sh;
+  const cctx = crop.getContext("2d");
+  cctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  const lang = state.settings.lang === "es-MX" ? "spa" : "eng";
+  try{
+    const result = await window.Tesseract.recognize(crop, lang);
+    const text = (result.data && result.data.text ? result.data.text : "").trim();
+    if(text){
+      $("quoteText").value = text;
+    }
+    showToast(t("toastOcrDone"));
+    $("quoteOcrStatus").textContent = t("toastOcrDone");
+    closeOcrModal();
+  }catch(_){
+    showToast(t("toastOcrMissing"));
+    $("quoteOcrStatus").textContent = "";
+  }
+}
+
+// ---------- Tabs ----------
+function switchTab(name){
+  if(!name) return;
+  document.querySelectorAll(".tabbtn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tabbtn").forEach(b => {
+    if(b.dataset.tab === name) b.classList.add("active");
+  });
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.classList.toggle("active", tab.id === `tab-${name}`);
+  });
+}
+
+function setupTabs(){
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".tabbtn");
+    if(!btn) return;
+    switchTab(btn.dataset.tab);
+  });
+}
+
+// ---------- Events ----------
 function bind(){
+  setupTabs();
+
   $("addBook").addEventListener("click", addBook);
 
   $("bookSelect").addEventListener("change", ()=>{
@@ -630,10 +1815,16 @@ function bind(){
   $("saveBook").addEventListener("click", saveActiveBook);
   $("deleteBook").addEventListener("click", deleteActiveBook);
 
+  $("newCover").addEventListener("change", (e)=>handleNewCoverInput(e.target));
+  $("editCover").addEventListener("change", (e)=>handleCoverInput(e.target, activeBook()));
+
   $("start").addEventListener("click", startTimer);
   $("pause").addEventListener("click", togglePause);
   $("finish").addEventListener("click", finishSession);
   $("hyper").addEventListener("click", hyperfocus);
+
+  $("pagesModeRange").addEventListener("change", togglePagesMode);
+  $("pagesModeCount").addEventListener("change", togglePagesMode);
 
   $("exportBtn").addEventListener("click", exportJSON);
   $("importFile").addEventListener("change", (e)=>{
@@ -642,21 +1833,94 @@ function bind(){
     e.target.value = "";
   });
 
-  $("driveSignIn").addEventListener("click", driveSignIn);
+  $("driveSignIn").addEventListener("click", ()=>handleAuthFlow(true));
   $("drivePull").addEventListener("click", drivePull);
   $("drivePush").addEventListener("click", drivePush);
-
-  $("resetAll").addEventListener("click", ()=>{
-    if(!confirm("¿Reset total?")) return;
-    localStorage.removeItem(STORAGE_KEY);
-    location.reload();
+  $("driveAuto").addEventListener("change", ()=>{
+    state.drive.autoMins = Number($("driveAuto").value || 0);
+    save();
+    scheduleDriveAuto();
   });
+
+  $("appLang").addEventListener("change", () => {
+    setLanguage($("appLang").value);
+  });
+
+  $("addQuote").addEventListener("click", addQuote);
+  $("quoteText").addEventListener("input", () => {
+    const hasText = Boolean($("quoteText").value.trim());
+    $("previewQuote").disabled = !hasText;
+    if(!hasText){
+      $("downloadQuote").disabled = true;
+      $("quotePreview").classList.remove("show");
+    }
+  });
+  $("quotesList").addEventListener("click", handleQuoteActions);
+  $("previewQuote").addEventListener("click", drawQuoteImage);
+  $("downloadQuote").addEventListener("click", ()=>downloadCanvas($("quoteCanvas"), `quote_${todayKey()}.png`));
+
+  $("quoteOcrStart").addEventListener("click", openOcrModal);
+  $("ocrCancel").addEventListener("click", closeOcrModal);
+  $("ocrUse").addEventListener("click", runOcr);
+  $("ocrUpload").addEventListener("change", (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(f) loadOcrImage(f);
+    e.target.value = "";
+  });
+  $("ocrCamera").addEventListener("change", (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(f) loadOcrImage(f);
+    e.target.value = "";
+  });
+  $("ocrCanvas").addEventListener("pointerdown", handleOcrPointerDown);
+  $("ocrCanvas").addEventListener("pointermove", handleOcrPointerMove);
+  $("ocrCanvas").addEventListener("pointerup", handleOcrPointerUp);
+  $("ocrCanvas").addEventListener("pointerleave", handleOcrPointerUp);
+
+  $("makeStory").addEventListener("click", ()=>{
+    drawStory($("storyScope").value);
+  });
+  $("downloadStory").addEventListener("click", ()=>downloadCanvas($("storyCanvas"), `story_${todayKey()}.png`));
+
+  $("markFinished").addEventListener("click", ()=>{
+    const b = activeBook();
+    b.currentPage = b.totalPages || b.currentPage;
+    b.finishedAt = new Date().toISOString();
+    save();
+    renderAll();
+    $("finishOverlay").classList.add("open");
+    $("finishOverlay").setAttribute("aria-hidden", "false");
+  });
+  $("shareFinish").addEventListener("click", ()=>{
+    $("finishOverlay").classList.add("open");
+    $("finishOverlay").setAttribute("aria-hidden", "false");
+  });
+  $("finishGenerate").addEventListener("click", drawFinishStory);
+  $("finishDownload").addEventListener("click", ()=>downloadCanvas($("finishCanvas"), `finish_${todayKey()}.png`));
+  $("finishClose").addEventListener("click", ()=>{
+    $("finishOverlay").classList.remove("open");
+    $("finishOverlay").setAttribute("aria-hidden", "true");
+  });
+
+  $("authSignIn").addEventListener("click", ()=>handleAuthFlow(true));
+
+  $("dlBookPages").addEventListener("click", ()=>downloadCanvas($("chartPages"), `book_pages_${todayKey()}.png`));
+  $("dlBookMins").addEventListener("click", ()=>downloadCanvas($("chartMins"), `book_minutes_${todayKey()}.png`));
+  $("dlAllPages").addEventListener("click", ()=>downloadCanvas($("chartAllPages"), `all_pages_${todayKey()}.png`));
+  $("dlAllMins").addEventListener("click", ()=>downloadCanvas($("chartAllMins"), `all_minutes_${todayKey()}.png`));
 }
 
 // ---------- Init ----------
 load();
+normalizeBooks();
 ensureDefaultBook();
-bind();
-setupPWA();
+applyI18n();
+$("appLang").value = state.settings.lang || "en-GB";
+$("driveAuto").value = String(state.drive.autoMins || 1);
 setDriveUI(Boolean(state.drive.token));
+setAuthGate(false);
+bind();
+togglePagesMode();
 renderAll();
+
+scheduleSilentSignIn();
