@@ -1591,7 +1591,8 @@ function ensureDriveToken(interactive){
         resolve(false);
       }
     };
-    client.requestAccessToken({ prompt: interactive ? "consent" : "none" });
+    const prompt = interactive ? (state.drive.hasConsent ? "" : "consent") : "none";
+    client.requestAccessToken({ prompt });
   });
 }
 
