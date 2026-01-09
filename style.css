@@ -137,6 +137,11 @@ textarea{min-height:96px;resize:vertical}
   background:rgba(255,255,255,0.10);
   border-color:rgba(255,255,255,0.25);
 }
+#authSignIn.btn.primary{
+  background:linear-gradient(135deg, #6cf5c0, #4ce59f);
+  border-color:rgba(108,245,192,0.6);
+  color:#0b0f0d;
+}
 .btn.danger{
   background:rgba(255,80,80,0.08);
   border-color:rgba(255,80,80,0.35);
@@ -334,11 +339,23 @@ canvas{
   padding:24px;
   text-align:center;
 }
-.authBrand{
-  font-weight:900;
+.authBadge{
+  width:56px;
+  height:56px;
+  margin:0 auto 16px;
+  border-radius:16px;
+  display:grid;
+  place-items:center;
+  font-weight:800;
   letter-spacing:0.4px;
-  font-size:26px;
-  margin-bottom:12px;
+  background:linear-gradient(135deg, #1f2f2a, #0f1b18);
+  color:#7ff6c6;
+  border:1px solid rgba(127,246,198,0.25);
+}
+.authTitle{
+  margin:0;
+  font-size:22px;
+  font-weight:800;
 }
 .authCopy{
   color:var(--muted);
@@ -360,4 +377,33 @@ canvas{
   background:rgba(0,0,0,0.25);
   margin-top:12px;
   touch-action:none;
+}
+
+/* Settings Sync Card */
+.syncCard{
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:18px;
+  background:linear-gradient(180deg, rgba(20,21,26,0.9), rgba(12,13,16,0.9));
+  margin-top:14px;
+}
+.syncHeader{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  align-items:flex-start;
+}
+.syncTitle{
+  font-size:16px;
+  font-weight:800;
+  margin-bottom:6px;
+}
+.syncCopy{
+  color:var(--muted);
+  font-size:13px;
+}
+.syncMeta{
+  color:var(--muted);
+  font-size:12px;
+  margin-top:10px;
 }

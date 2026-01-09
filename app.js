@@ -6,9 +6,9 @@ const DEFAULT_CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.go
 
 const I18N = {
   "en-GB": {
-    authTitle: "Sign in to continue",
-    authCopy: "Your progress syncs to Google Drive and stays available on every device.",
-    authSignIn: "Continue with Google",
+    authTitle: "Connect Google Drive",
+    authCopy: "Sign in once to unlock your tracker and keep every photo and session backed up safely.",
+    authSignIn: "Sign in with Google",
     authMeta: "We only access your Drive app data folder.",
     authCheckingTitle: "Checking your session",
     authCheckingCopy: "Hang tight. Verifying your Google session.",
@@ -118,20 +118,12 @@ const I18N = {
     langEn: "English (UK)",
     langEs: "Spanish (Mexico)",
     languageNotice: "App text and share images follow this choice.",
-    driveSummary: "Google Drive",
-    driveNotice: "Progress and covers sync to your Drive app data folder.",
-    driveReconnect: "Reconnect Google",
-    drivePull: "Pull from Drive",
-    drivePush: "Save to Drive",
-    driveAutoLabel: "Auto-save to Drive",
-    driveAutoOff: "Off",
-    driveAuto1: "Every 1 minute",
-    driveAuto5: "Every 5 minutes",
-    driveAuto10: "Every 10 minutes",
-    driveAuto15: "Every 15 minutes",
-    lastPullLabel: "Last pull",
-    lastPushLabel: "Last save",
+    driveTitle: "Google Drive sync",
+    driveNotice: "Connect once to keep your data and covers safely backed up.",
+    driveConnect: "Connect Google Drive",
+    driveSyncNow: "Sync now",
     driveLogLabel: "Recent Drive uploads",
+    driveLastBackup: "Backup uploaded {time}",
     manualBackupSummary: "Manual backup",
     exportJson: "Export JSON",
     importJson: "Import JSON",
@@ -207,208 +199,7 @@ const I18N = {
     noUploads: "No uploads yet.",
     daysUnit: "days"
   },
-  "es-MX": {
-    authTitle: "Inicia sesion para continuar",
-    authCopy: "Tu progreso se sincroniza con Google Drive y queda disponible en cada dispositivo.",
-    authSignIn: "Continuar con Google",
-    authMeta: "Solo usamos tu carpeta de datos de la app en Drive.",
-    authCheckingTitle: "Verificando tu sesion",
-    authCheckingCopy: "Espera un momento. Revisamos tu sesion de Google.",
-    navDashboard: "Panel",
-    navBooks: "Libros",
-    navSession: "Sesion",
-    navStats: "Estadisticas",
-    navAchievements: "Logros",
-    navQuotes: "Citas",
-    navSettings: "Ajustes",
-    dashboardTitle: "Panel",
-    statsRangeLabel: "Rango",
-    range7: "7 dias",
-    range30: "30 dias",
-    range90: "3 meses",
-    range180: "6 meses",
-    range365: "1 ano",
-    rangeAll: "Todo",
-    storyScopeLabel: "Alcance de historia",
-    storyScopeBook: "Libro activo",
-    storyScopeYear: "Resumen anual",
-    storyScopeOverall: "Total (rango)",
-    kpiLevel: "Nivel",
-    kpiXp: "XP",
-    kpiStreak: "Racha",
-    kpiDailyQuest: "Mision diaria",
-    makeStory: "Generar PNG",
-    downloadStory: "Descargar PNG",
-    activeBookTitle: "Libro activo",
-    markFinished: "Marcar terminado",
-    shareFinish: "Compartir final",
-    finishNotice: "Se considera terminado al llegar al total de paginas (o marcar manual).",
-    overallTitle: "Total (en rango)",
-    kpiBooks: "Libros",
-    kpiFinished: "Terminados",
-    kpiPages: "Paginas",
-    kpiMinutes: "Minutos",
-    booksTitle: "Libros",
-    activeBookLabel: "Libro activo",
-    addBookSummary: "Agregar libro",
-    editBookSummary: "Editar libro activo",
-    titleLabel: "Titulo",
-    titlePlaceholder: "Ej. Canto 2 (edicion X)",
-    authorLabel: "Autor",
-    authorPlaceholder: "Ej. ...",
-    publisherLabel: "Editorial",
-    publisherPlaceholder: "Ej. ...",
-    editionLabel: "Edicion",
-    editionPlaceholder: "Ej. 2a",
-    totalPagesLabel: "Paginas totales",
-    totalPagesPlaceholder: "Ej. 320",
-    currentPageLabel: "Pagina actual",
-    currentPagePlaceholder: "Ej. 0",
-    coverLabel: "Portada (PNG/JPG/JPEG)",
-    addBook: "Agregar",
-    saveBook: "Guardar",
-    deleteBook: "Borrar libro",
-    sessionTitle: "Sesion",
-    modeLabel: "Modo",
-    modeSprint: "Sprint",
-    modeOpen: "Libre",
-    sprintLabel: "Sprint (minutos)",
-    start: "Iniciar",
-    pause: "Pausa",
-    resume: "Reanudar",
-    endSession: "Terminar sesion",
-    keepGoing: "Seguir",
-    pageRange: "Rango de paginas",
-    pageCount: "Conteo de paginas",
-    fromPageLabel: "Desde",
-    fromPagePlaceholder: "Auto",
-    toPageLabel: "Hasta (requerido)",
-    toPagePlaceholder: "Ej. 42",
-    pagesReadLabel: "Paginas leidas",
-    pagesReadPlaceholder: "Ej. 6",
-    sessionNotice: "Al terminar se guarda y actualiza la pagina. Cambiar de pestana no reinicia.",
-    activeBookStatsTitle: "Estadisticas",
-    progressLabel: "Progreso",
-    paceLabel: "Ritmo",
-    etaLabel: "ETA",
-    sessionsLabel: "Sesiones (rango)",
-    activeBookCharts: "Graficas del libro",
-    pagesPerDay: "Paginas por dia",
-    minsPerDay: "Minutos por dia",
-    downloadPng: "Descargar PNG",
-    overallCharts: "Graficas totales",
-    overallPagesPerDay: "Paginas por dia (total)",
-    overallMinsPerDay: "Minutos por dia (total)",
-    unlockedTitle: "Desbloqueados",
-    nextUpTitle: "Siguiente",
-    addQuoteTitle: "Agregar cita",
-    quotePhotoHint: "Opcional: extrae texto de una foto y luego editalo.",
-    quoteOcr: "Usar foto con OCR",
-    quoteLabel: "Cita",
-    quotePlaceholder: "Pega o escribe la cita",
-    quoteAuthorLabel: "Autor",
-    quoteAuthorPlaceholder: "Ej. el autor",
-    quotePageLabel: "Pagina",
-    quotePagePlaceholder: "Ej. 42",
-    saveQuote: "Guardar cita",
-    previewQuote: "Vista previa",
-    downloadQuote: "Descargar PNG",
-    savedQuotesTitle: "Citas guardadas (libro activo)",
-    settingsTitle: "Ajustes",
-    languageSummary: "Idioma",
-    languageLabel: "Idioma",
-    langEn: "Ingles (UK)",
-    langEs: "Espanol (MX)",
-    languageNotice: "La app y las imagenes siguen esta opcion.",
-    driveSummary: "Google Drive",
-    driveNotice: "El progreso y portadas se guardan en tu carpeta de datos de Drive.",
-    driveReconnect: "Reconectar Google",
-    drivePull: "Traer de Drive",
-    drivePush: "Guardar en Drive",
-    driveAutoLabel: "Auto-guardar en Drive",
-    driveAutoOff: "Apagado",
-    driveAuto1: "Cada 1 minuto",
-    driveAuto5: "Cada 5 minutos",
-    driveAuto10: "Cada 10 minutos",
-    driveAuto15: "Cada 15 minutos",
-    lastPullLabel: "Ultimo pull",
-    lastPushLabel: "Ultimo guardado",
-    driveLogLabel: "Subidas recientes",
-    manualBackupSummary: "Backup manual",
-    exportJson: "Exportar JSON",
-    importJson: "Importar JSON",
-    manualBackupNotice: "Usalo para mover tu progreso sin iniciar sesion.",
-    finishShareTitle: "Comparte tu final",
-    finishRatingLabel: "Calificacion",
-    finishRatingNone: "Sin calificacion",
-    finishGenerate: "Generar PNG",
-    finishDownload: "Descargar PNG",
-    finishClose: "Cerrar",
-    ocrTitle: "Extraer texto de foto",
-    ocrUpload: "Subir foto",
-    ocrCamera: "Tomar foto",
-    ocrHint: "Arrastra para seleccionar el area y luego aplica OCR.",
-    ocrUse: "Usar seleccion",
-    ocrCancel: "Cancelar",
-    statusConnected: "Conectado",
-    statusNotSigned: "No conectado",
-    statusPulled: "Traido de Drive",
-    statusSaved: "Guardado en Drive",
-    statusNoFile: "Aun no hay archivo en Drive.",
-    statusPullError: "Error al traer de Drive.",
-    statusPushError: "Error al guardar en Drive.",
-    toastSaved: "Guardado",
-    toastUpdated: "Actualizado",
-    toastImported: "Importado",
-    toastOcrMissing: "Agrega una foto primero.",
-    toastOcrWorking: "Leyendo texto...",
-    toastOcrDone: "Texto listo. Puedes editar.",
-    confirmDeleteBook: "Borrar \"{title}\"? (Sesiones quedan como libro borrado)",
-    confirmReset: "Reiniciar todo?",
-    alertNeedPages: "Agrega paginas totales.",
-    alertImportFail: "No pude importar ese JSON.",
-    timerSprintDone: "Sprint completo. Sigue si quieres.",
-    timerSprintHint: "Solo empieza. Decide al final.",
-    timerPaused: "En pausa.",
-    timerFlowHint: "Flow: sin limite. Tu mandas.",
-    timerHyperHint: "Hyperfocus. Sigue.",
-    sessionSaved: "Sesion guardada. Otra mini-sesion?",
-    sessionNeedToPage: "Agrega la ultima pagina.",
-    etaFinished: "Terminado",
-    etaNeedPace: "Necesito una sesion con paginas",
-    storyTitleYear: "Tu ano lector",
-    storyTitleOverall: "Resumen lector",
-    storyTitleBook: "Libro actual",
-    storyBook: "Libro",
-    storyPages: "Paginas",
-    storyMinutes: "Minutos",
-    storyHours: "Horas",
-    storyBooks: "Libros",
-    storyFinished: "Terminados",
-    storySessions: "Sesiones",
-    storyProgress: "Progreso",
-    storyPace: "Ritmo",
-    storyEta: "ETA",
-    storyApp: "BookQuest",
-    finishShareHeadline: "Terminado",
-    finishShareRating: "Calificacion",
-    quoteShareLabel: "Cita",
-    quoteShareBook: "Libro",
-    quoteSharePage: "Pagina",
-    quoteShareApp: "BookQuest",
-    quoteCopy: "Copiar",
-    quoteDelete: "Borrar",
-    dayStreak: "dias de racha",
-    dailyQuestDone: "Listo",
-    dailyQuestGoal: "Lee {pages} paginas",
-    paceLabelUnit: "pag/min",
-    minutesUnit: "min",
-    pagesUnit: "pag",
-    untitled: "Sin titulo",
-    noQuotes: "No hay citas aun.",
-    noUploads: "Sin subidas aun.",
-    daysUnit: "dias"
-  }
+  "es-MX": (window.BOOKQUEST_I18N_ES || {})
 };
 
 const state = {
@@ -501,6 +292,7 @@ function load(){
   state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0 }, state.drive || {});
   state.drive.token = null;
   state.drive.expiresAt = 0;
+  if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
   state.settings = Object.assign({ lang:"en-GB" }, state.settings || {});
   state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
   if(!state.books) state.books = {};
@@ -1054,8 +846,11 @@ function renderQuotes(){
 }
 
 function renderDriveLog(){
-  $("lastPull").textContent = formatDateTime(state.drive.lastPullISO);
-  $("lastPush").textContent = formatDateTime(state.drive.lastSyncISO);
+  const lastBackup = $("driveLastBackup");
+  if(lastBackup){
+    const time = formatDateTime(state.drive.lastSyncISO);
+    lastBackup.textContent = state.drive.lastSyncISO ? t("driveLastBackup", { time }) : "—";
+  }
   const log = state.drive.syncLog || [];
   $("driveSyncLog").innerHTML = log.slice().reverse().map(iso => {
     return `<div class="item"><div class="itemTitle">${formatDateTime(iso)}</div></div>`;
@@ -1394,9 +1189,12 @@ function drawFinishStory(){
 
 // ---------- Drive Sync ----------
 function setDriveUI(connected){
-  $("drivePull").disabled = !connected;
-  $("drivePush").disabled = !connected;
-  $("driveStatus").textContent = connected ? t("statusConnected") : t("statusNotSigned");
+  const drivePullBtn = $("drivePull");
+  if(drivePullBtn) drivePullBtn.disabled = !connected;
+  const drivePushBtn = $("drivePush");
+  if(drivePushBtn) drivePushBtn.disabled = !connected;
+  const driveStatus = $("driveStatus");
+  if(driveStatus) driveStatus.textContent = connected ? t("statusConnected") : t("statusNotSigned");
 }
 
 function driveClientId(){
@@ -1484,15 +1282,16 @@ async function drivePull(){
     const expiresAt = state.drive.expiresAt;
     Object.assign(state, data);
     state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0 }, state.drive || {}, { token, expiresAt, fileId });
-    state.settings = Object.assign({ lang:\"en-GB\" }, state.settings || {});
+    state.settings = Object.assign({ lang:"en-GB" }, state.settings || {});
     state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
+    if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
     normalizeBooks();
     state.drive.lastPullISO = new Date().toISOString();
 
     ensureDefaultBook();
     applyI18n();
-    $(\"appLang\").value = state.settings.lang || \"en-GB\";
-    $(\"driveAuto\").value = String(state.drive.autoMins || 1);
+    const appLangSelect = $("appLang");
+    if(appLangSelect) appLangSelect.value = state.settings.lang || "en-GB";
     save();
     renderAll();
     setDriveUI(true);
@@ -1607,6 +1406,13 @@ function scheduleSilentSignIn(){
       }
     }
   }, 500);
+}
+
+function cleanupServiceWorkers(){
+  if(!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(reg => reg.unregister());
+  }).catch(()=>{});
 }
 
 async function handleAuthFlow(interactive){
@@ -1826,25 +1632,32 @@ function bind(){
   $("pagesModeRange").addEventListener("change", togglePagesMode);
   $("pagesModeCount").addEventListener("change", togglePagesMode);
 
-  $("exportBtn").addEventListener("click", exportJSON);
-  $("importFile").addEventListener("change", (e)=>{
-    const f = e.target.files && e.target.files[0];
-    if(f) importJSON(f);
-    e.target.value = "";
-  });
+  const exportBtn = $("exportBtn");
+  if(exportBtn){
+    exportBtn.addEventListener("click", exportJSON);
+  }
+  const importFile = $("importFile");
+  if(importFile){
+    importFile.addEventListener("change", (e)=>{
+      const f = e.target.files && e.target.files[0];
+      if(f) importJSON(f);
+      e.target.value = "";
+    });
+  }
 
-  $("driveSignIn").addEventListener("click", ()=>handleAuthFlow(true));
-  $("drivePull").addEventListener("click", drivePull);
-  $("drivePush").addEventListener("click", drivePush);
-  $("driveAuto").addEventListener("change", ()=>{
-    state.drive.autoMins = Number($("driveAuto").value || 0);
-    save();
-    scheduleDriveAuto();
-  });
+  const driveSignIn = $("driveSignIn");
+  if(driveSignIn) driveSignIn.addEventListener("click", ()=>handleAuthFlow(true));
+  const drivePullBtn = $("drivePull");
+  if(drivePullBtn) drivePullBtn.addEventListener("click", drivePull);
+  const drivePushBtn = $("drivePush");
+  if(drivePushBtn) drivePushBtn.addEventListener("click", drivePush);
 
-  $("appLang").addEventListener("change", () => {
-    setLanguage($("appLang").value);
-  });
+  const appLang = $("appLang");
+  if(appLang){
+    appLang.addEventListener("change", () => {
+      setLanguage($("appLang").value);
+    });
+  }
 
   $("addQuote").addEventListener("click", addQuote);
   $("quoteText").addEventListener("input", () => {
@@ -1902,7 +1715,8 @@ function bind(){
     $("finishOverlay").setAttribute("aria-hidden", "true");
   });
 
-  $("authSignIn").addEventListener("click", ()=>handleAuthFlow(true));
+  const authSignIn = $("authSignIn");
+  if(authSignIn) authSignIn.addEventListener("click", ()=>handleAuthFlow(true));
 
   $("dlBookPages").addEventListener("click", ()=>downloadCanvas($("chartPages"), `book_pages_${todayKey()}.png`));
   $("dlBookMins").addEventListener("click", ()=>downloadCanvas($("chartMins"), `book_minutes_${todayKey()}.png`));
@@ -1915,12 +1729,13 @@ load();
 normalizeBooks();
 ensureDefaultBook();
 applyI18n();
-$("appLang").value = state.settings.lang || "en-GB";
-$("driveAuto").value = String(state.drive.autoMins || 1);
+const appLangSelect = $("appLang");
+if(appLangSelect) appLangSelect.value = state.settings.lang || "en-GB";
 setDriveUI(Boolean(state.drive.token));
 setAuthGate(false);
 bind();
 togglePagesMode();
 renderAll();
 
+cleanupServiceWorkers();
 scheduleSilentSignIn();

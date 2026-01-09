@@ -14,9 +14,9 @@
 <body>
   <div class="authGate" id="authGate" aria-hidden="true">
     <div class="authCard">
-      <div class="authBrand">BookQuest</div>
-      <h2 data-i18n="authTitle">Sign in to continue</h2>
-      <p class="authCopy" data-i18n="authCopy">Your progress syncs to Google Drive and stays available on every device.</p>
+      <div class="authBadge">BQ</div>
+      <h2 class="authTitle" data-i18n="authTitle">Connect Google Drive</h2>
+      <p class="authCopy" data-i18n="authCopy">Sign in once to unlock your tracker and keep every photo and session backed up safely.</p>
       <button class="btn primary" id="authSignIn" type="button" data-i18n="authSignIn">Continue with Google</button>
       <div class="authMeta" data-i18n="authMeta">We only access your Drive app data folder.</div>
     </div>
@@ -431,8 +431,32 @@
           <section class="card col-12">
             <h2 data-i18n="settingsTitle">Settings</h2>
 
-            <details open>
-              <summary data-i18n="languageSummary">Language</summary>
+            <div class="syncCard">
+              <div class="syncHeader">
+                <div>
+                  <div class="syncTitle" data-i18n="driveTitle">Google Drive sync</div>
+                  <div class="syncCopy" data-i18n="driveNotice">Progress and covers sync to your Drive app data folder.</div>
+                </div>
+                <div class="badge"><span>☁️</span><span id="driveStatus">Not signed in</span></div>
+              </div>
+
+              <div class="row">
+                <button class="btn primary" id="driveSignIn" type="button" data-i18n="driveConnect">Connect Google Drive</button>
+                <button class="btn" id="drivePush" type="button" data-i18n="driveSyncNow">Sync now</button>
+              </div>
+
+              <div class="syncMeta" id="driveLastBackup">—</div>
+              <div class="notice" data-i18n="driveLogLabel">Recent Drive uploads</div>
+              <div class="list" id="driveSyncLog"></div>
+            </div>
+
+            <div class="syncCard">
+              <div class="syncHeader">
+                <div>
+                  <div class="syncTitle" data-i18n="languageSummary">Language</div>
+                  <div class="syncCopy" data-i18n="languageNotice">App text and share images follow this choice.</div>
+                </div>
+              </div>
               <div class="row">
                 <div class="field">
                   <label for="appLang" data-i18n="languageLabel">Language</label>
@@ -442,55 +466,7 @@
                   </select>
                 </div>
               </div>
-              <div class="notice" data-i18n="languageNotice">App text and share images follow this choice.</div>
-            </details>
-
-            <details open>
-              <summary data-i18n="driveSummary">Google Drive</summary>
-              <div class="notice" data-i18n="driveNotice">Progress and covers sync to your Drive app data folder.</div>
-
-              <div class="row">
-                <button class="btn primary" id="driveSignIn" type="button" data-i18n="driveReconnect">Reconnect Google</button>
-                <button class="btn" id="drivePull" type="button" data-i18n="drivePull">Pull from Drive</button>
-                <button class="btn" id="drivePush" type="button" data-i18n="drivePush">Save to Drive</button>
-                <div class="badge"><span>☁️</span><span id="driveStatus">Not signed in</span></div>
-              </div>
-
-              <div class="row">
-                <div class="field">
-                  <label for="driveAuto" data-i18n="driveAutoLabel">Auto-save to Drive</label>
-                  <select id="driveAuto">
-                    <option value="0" data-i18n="driveAutoOff">Off</option>
-                    <option value="1" selected data-i18n="driveAuto1">Every 1 minute</option>
-                    <option value="5" data-i18n="driveAuto5">Every 5 minutes</option>
-                    <option value="10" data-i18n="driveAuto10">Every 10 minutes</option>
-                    <option value="15" data-i18n="driveAuto15">Every 15 minutes</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label data-i18n="lastPullLabel">Last pull</label>
-                  <div class="badge"><span>⬇️</span><span id="lastPull">—</span></div>
-                </div>
-                <div class="field">
-                  <label data-i18n="lastPushLabel">Last save</label>
-                  <div class="badge"><span>⬆️</span><span id="lastPush">—</span></div>
-                </div>
-              </div>
-
-              <div class="notice" data-i18n="driveLogLabel">Recent Drive uploads</div>
-              <div class="list" id="driveSyncLog"></div>
-              <div class="notice" id="driveHint"></div>
-            </details>
-
-            <details>
-              <summary data-i18n="manualBackupSummary">Manual backup</summary>
-              <div class="row">
-                <button class="btn" id="exportBtn" type="button" data-i18n="exportJson">Export JSON</button>
-                <label class="btn" for="importFile" data-i18n="importJson">Import JSON</label>
-                <input id="importFile" type="file" accept="application/json" class="hidden" />
-              </div>
-              <div class="notice" data-i18n="manualBackupNotice">Use this to move your progress between devices without signing in.</div>
-            </details>
+            </div>
           </section>
         </div>
       </section>
@@ -550,6 +526,7 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" async defer></script>
+  <script src="./i18n.es.js"></script>
   <script src="./app.js"></script>
   <script src="./config.js"></script>
 </body>
