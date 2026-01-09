@@ -125,6 +125,8 @@ const I18N = {
     driveNotice: "Connect once to keep your data and covers safely backed up.",
     driveConnect: "Connect Google Drive",
     driveSyncNow: "Sync now",
+    driveDisconnect: "Log out",
+    driveDisconnectConfirm: "Log out from Google Drive?",
     driveLogLabel: "Recent Drive uploads",
     driveLastBackup: "Backup uploaded {time}",
     driveLastBackupEmpty: "No backups yet.",
@@ -157,6 +159,7 @@ const I18N = {
     toastOcrMissing: "Add a photo first.",
     toastOcrWorking: "Reading text...",
     toastOcrDone: "Text ready. Edit if needed.",
+    toastLoggedOut: "Logged out",
     confirmDeleteBook: "Delete \"{title}\"? (Sessions stay as deleted book)",
     confirmReset: "Reset everything?",
     alertNeedPages: "Add total pages (no blanks).",
@@ -255,7 +258,8 @@ const state = {
     lang: "en-GB"
   },
   ui: {
-    quotesBookId: null
+    quotesBookId: null,
+    quoteAuthorAuto: ""
   }
 };
 
@@ -324,7 +328,7 @@ function load(){
   if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
   state.settings = Object.assign({ lang:"en-GB" }, state.settings || {});
   state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
-  state.ui = Object.assign({ quotesBookId: null }, state.ui || {});
+  state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
   if(!state.books) state.books = {};
 }
 
@@ -432,6 +436,12 @@ function formatDateTime(iso){
     dateStyle: "medium",
     timeStyle: "short"
   }).format(dt);
+}
+
+function formatDateOnly(date){
+  return new Intl.DateTimeFormat(state.settings.lang || "en-GB", {
+    dateStyle: "medium"
+  }).format(date);
 }
 
 function formatPace(pace){
@@ -931,6 +941,7 @@ function renderQuoteBooks(){
 }
 
 function renderQuotes(){
+  syncQuoteAuthor();
   renderQuoteBooks();
   ensureQuoteBookSelection();
   const bookId = state.ui.quotesBookId || state.activeBookId;
@@ -953,6 +964,18 @@ function renderQuotes(){
       </div>
     `;
   }).join("") || `<div class="muted small">${t("noQuotes")}</div>`;
+}
+
+function syncQuoteAuthor(){
+  const input = $("quoteAuthor");
+  if(!input) return;
+  const book = activeBook();
+  const author = book && book.author ? book.author : "";
+  const lastAuto = state.ui.quoteAuthorAuto || "";
+  if(!input.value || input.value === lastAuto){
+    input.value = author;
+  }
+  state.ui.quoteAuthorAuto = author;
 }
 
 function renderDriveLog(){
@@ -1204,6 +1227,23 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight){
   return y;
 }
 
+function countWrapLines(ctx, text, maxWidth){
+  const words = text.split(" ");
+  let line = "";
+  let lines = 1;
+  for(let i=0;i<words.length;i++){
+    const test = line + words[i] + " ";
+    const w = ctx.measureText(test).width;
+    if(w > maxWidth && i > 0){
+      lines += 1;
+      line = words[i] + " ";
+    }else{
+      line = test;
+    }
+  }
+  return lines;
+}
+
 function loadImage(src){
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -1229,8 +1269,8 @@ async function drawQuoteStory(quote, book){
 
   const coverW = 320;
   const coverH = 460;
-  const coverX = W - coverW - 80;
-  const coverY = 260;
+  const coverX = W - coverW - 90;
+  const coverY = 280;
 
   if(book && book.coverData){
     try{
@@ -1246,18 +1286,39 @@ async function drawQuoteStory(quote, book){
 
   const textX = 90;
   const textY = 240;
-  const textW = coverX - textX - 40;
+  const textW = coverX - textX - 50;
+  const quoteText = `“${quote.text}”`;
+  const author = quote.author || (book ? book.author : "");
+
+  let quoteSize = 56;
+  let quoteLine = Math.round(quoteSize * 1.2);
+  const metaY = H - 220;
+  while(quoteSize >= 40){
+    ctx.font = `700 ${quoteSize}px system-ui`;
+    const lines = countWrapLines(ctx, quoteText, textW);
+    const authorSize = Math.round(quoteSize * 0.6);
+    let authorBlock = 0;
+    if(author){
+      ctx.font = `500 ${authorSize}px system-ui`;
+      const authorLines = countWrapLines(ctx, `— ${author}`, textW);
+      authorBlock = authorLines * Math.round(authorSize * 1.2) + 36;
+    }
+    const totalHeight = lines * quoteLine + authorBlock;
+    if(textY + totalHeight < metaY - 40) break;
+    quoteSize -= 2;
+    quoteLine = Math.round(quoteSize * 1.2);
+  }
 
   ctx.fillStyle = "#ffffff";
-  ctx.font = "700 54px system-ui";
-  let y = wrapText(ctx, `“${quote.text}”`, textX, textY, textW, 64);
+  ctx.font = `700 ${quoteSize}px system-ui`;
+  let y = wrapText(ctx, quoteText, textX, textY, textW, quoteLine);
 
-  const author = quote.author || (book ? book.author : "");
   if(author){
+    const authorSize = Math.round(quoteSize * 0.6);
     ctx.fillStyle = "#b6b6bd";
-    ctx.font = "500 34px system-ui";
-    y += 70;
-    ctx.fillText(`— ${author}`, textX, y);
+    ctx.font = `500 ${authorSize}px system-ui`;
+    y += Math.round(authorSize * 1.3);
+    wrapText(ctx, `— ${author}`, textX, y, textW, Math.round(authorSize * 1.2));
   }
 
   const meta = [
@@ -1267,7 +1328,7 @@ async function drawQuoteStory(quote, book){
   if(meta){
     ctx.fillStyle = "#8f90a0";
     ctx.font = "500 28px system-ui";
-    wrapText(ctx, meta, textX, H - 220, textW, 40);
+    wrapText(ctx, meta, textX, metaY, textW, 40);
   }
 
   ctx.fillStyle = "#ffffff";
@@ -1309,7 +1370,8 @@ async function drawStory(scope){
 
   ctx.font = "400 30px system-ui";
   ctx.fillStyle = "#c9c9d2";
-  ctx.fillText(new Date().getFullYear(), 80, 190);
+  const sub = scope === "book" ? formatDateOnly(new Date()) : String(new Date().getFullYear());
+  ctx.fillText(sub, 80, 190);
 
   const stats = [];
   let coverImg = null;
@@ -1347,25 +1409,46 @@ async function drawStory(scope){
     stats.push([t("storySessions"), `${sessionsCount}`]);
   }
 
-  if(coverImg && coverBook){
-    const coverW = 300;
-    const coverH = 460;
-    const coverX = W - coverW - 80;
-    const coverY = 260;
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    ctx.fillRect(coverX - 10, coverY - 10, coverW + 20, coverH + 20);
-    ctx.drawImage(coverImg, coverX, coverY, coverW, coverH);
-  }
+  if(scope === "book"){
+    let y = 300;
+    const labelX = 80;
+    const valueX = 420;
+    const valueW = W - valueX - 100;
+    const labelFont = "600 34px system-ui";
+    const valueFont = "600 34px system-ui";
+    const valueLine = 44;
+    stats.forEach(([label, value]) => {
+      ctx.fillStyle = "#8f90a0";
+      ctx.font = labelFont;
+      ctx.fillText(label, labelX, y);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = valueFont;
+      const text = String(value);
+      const lines = Math.max(1, countWrapLines(ctx, text, valueW));
+      wrapText(ctx, text, valueX, y, valueW, valueLine);
+      y += Math.max(1, lines) * (valueLine + 14);
+    });
 
-  let y = 320;
-  ctx.font = "600 36px system-ui";
-  stats.forEach(([label, value]) => {
-    ctx.fillStyle = "#8f90a0";
-    ctx.fillText(label, 80, y);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(String(value), 420, y);
-    y += 70;
-  });
+    if(coverImg && coverBook){
+      const coverW = 320;
+      const coverH = 480;
+      const coverX = Math.round((W - coverW) / 2);
+      const coverY = H - coverH - 220;
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      ctx.fillRect(coverX - 12, coverY - 12, coverW + 24, coverH + 24);
+      ctx.drawImage(coverImg, coverX, coverY, coverW, coverH);
+    }
+  }else{
+    let y = 320;
+    ctx.font = "600 36px system-ui";
+    stats.forEach(([label, value]) => {
+      ctx.fillStyle = "#8f90a0";
+      ctx.fillText(label, 80, y);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(String(value), 420, y);
+      y += 70;
+    });
+  }
 
   ctx.fillStyle = "#ffffff";
   ctx.font = "700 30px system-ui";
@@ -1432,6 +1515,8 @@ function setDriveUI(connected){
   if(drivePullBtn) drivePullBtn.disabled = !connected;
   const drivePushBtn = $("drivePush");
   if(drivePushBtn) drivePushBtn.disabled = !connected;
+  const driveDisconnect = $("driveDisconnect");
+  if(driveDisconnect) driveDisconnect.disabled = !connected;
   const driveStatus = $("driveStatus");
   if(driveStatus) driveStatus.textContent = connected ? t("statusConnected") : t("statusNotSigned");
 }
@@ -1540,12 +1625,14 @@ async function drivePull(){
 
     const token = state.drive.token;
     const expiresAt = state.drive.expiresAt;
+    const hadConsent = state.drive.hasConsent;
     Object.assign(state, data);
-    state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0 }, state.drive || {}, { token, expiresAt, fileId });
+    state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0, hasConsent:false }, state.drive || {}, { token, expiresAt, fileId });
     state.settings = Object.assign({ lang:"en-GB" }, state.settings || {});
     state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
-    state.ui = Object.assign({ quotesBookId: null }, state.ui || {});
+    state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
     if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
+    state.drive.hasConsent = hadConsent || state.drive.hasConsent || Boolean(token);
     normalizeBooks();
     state.drive.lastPullISO = new Date().toISOString();
 
@@ -1560,6 +1647,23 @@ async function drivePull(){
   }catch(_){
     $("driveStatus").textContent = t("statusPullError");
   }
+}
+
+function disconnectDrive(){
+  const token = state.drive.token;
+  state.drive.token = null;
+  state.drive.expiresAt = 0;
+  state.drive.hasConsent = false;
+  save();
+  setDriveUI(false);
+  if(_driveAutoId){
+    clearInterval(_driveAutoId);
+    _driveAutoId = null;
+  }
+  if(token && window.google && google.accounts && google.accounts.oauth2 && google.accounts.oauth2.revoke){
+    google.accounts.oauth2.revoke(token, () => {});
+  }
+  setAuthGate(true, "login");
 }
 
 async function drivePush(){
@@ -1724,7 +1828,7 @@ function importJSON(file){
       const data = JSON.parse(reader.result);
       if(!data || typeof data !== "object") throw new Error("bad");
       Object.assign(state, data);
-      state.ui = Object.assign({ quotesBookId: null }, state.ui || {});
+      state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
       normalizeBooks();
       ensureDefaultBook();
       applyI18n();
@@ -1936,6 +2040,14 @@ function bind(){
   if(drivePullBtn) drivePullBtn.addEventListener("click", drivePull);
   const drivePushBtn = $("drivePush");
   if(drivePushBtn) drivePushBtn.addEventListener("click", drivePush);
+  const driveDisconnect = $("driveDisconnect");
+  if(driveDisconnect){
+    driveDisconnect.addEventListener("click", () => {
+      if(!confirm(t("driveDisconnectConfirm"))) return;
+      disconnectDrive();
+      showToast(t("toastLoggedOut"));
+    });
+  }
 
   const appLang = $("appLang");
   if(appLang){
