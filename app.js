@@ -1296,7 +1296,7 @@ async function drawQuoteStory(quote, book){
   const textY = 240;
   const textW = coverX - textX - 50;
   const quoteText = `“${quote.text}”`;
-  const author = quote.author || (book ? book.author : "");
+  const author = (book && book.author) ? book.author : (quote.author || "");
 
   let quoteSize = 56;
   let quoteLine = Math.round(quoteSize * 1.2);
