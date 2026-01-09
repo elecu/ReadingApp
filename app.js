@@ -1160,13 +1160,14 @@ function handleNewCoverInput(input){
 function addQuote(){
   const text = $("quoteText").value.trim();
   if(!text) return;
+  ensureQuoteBookSelection();
   const bookId = state.ui.quotesBookId || state.activeBookId;
   const book = state.books[bookId] || activeBook();
   const quote = {
     id: uid(),
     bookId,
     text,
-    author: book && book.author ? book.author : "",
+    author: book && book.author ? book.author.trim() : "",
     page: $("quotePage").value.trim(),
     createdAt: new Date().toISOString()
   };
@@ -1206,11 +1207,12 @@ function handleQuoteActions(e){
 async function drawQuoteImage(){
   const text = $("quoteText").value.trim();
   if(!text) return;
+  ensureQuoteBookSelection();
   const bookId = state.ui.quotesBookId || state.activeBookId;
   const book = state.books[bookId] || activeBook();
   const quote = {
     text,
-    author: book && book.author ? book.author : "",
+    author: book && book.author ? book.author.trim() : "",
     page: $("quotePage").value.trim()
   };
   await drawQuoteStory(quote, book);
@@ -1296,7 +1298,7 @@ async function drawQuoteStory(quote, book){
   const textY = 240;
   const textW = coverX - textX - 50;
   const quoteText = `“${quote.text}”`;
-  const author = (book && book.author) ? book.author : (quote.author || "");
+  const author = (book && book.author ? book.author.trim() : "") || (quote.author ? quote.author.trim() : "");
 
   let quoteSize = 56;
   let quoteLine = Math.round(quoteSize * 1.2);
