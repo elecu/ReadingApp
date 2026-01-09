@@ -181,6 +181,30 @@ textarea{min-height:96px;resize:vertical}
   font-size:12px;
 }
 
+.sessionBookRow{
+  margin-bottom:6px;
+}
+.sessionBookCard{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:180px;
+  padding:8px 10px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:rgba(0,0,0,0.18);
+  color:var(--muted);
+  font-size:12px;
+}
+.sessionBookCover{
+  width:36px;
+  height:52px;
+  border-radius:8px;
+  border:1px solid var(--line);
+  object-fit:cover;
+  background:rgba(0,0,0,0.3);
+}
+
 .badge{
   display:inline-flex;
   align-items:center;
@@ -387,6 +411,9 @@ canvas{
   background:linear-gradient(180deg, rgba(20,21,26,0.9), rgba(12,13,16,0.9));
   margin-top:14px;
 }
+.syncCardSubtle{
+  background:rgba(255,255,255,0.02);
+}
 .syncHeader{
   display:flex;
   justify-content:space-between;
@@ -404,6 +431,42 @@ canvas{
 }
 .syncMeta{
   color:var(--muted);
-  font-size:12px;
+  font-size:11px;
+  opacity:0.7;
   margin-top:10px;
+}
+
+/* Quote book tabs */
+.quoteBooks{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
+  gap:10px;
+  margin:10px 0 12px;
+}
+.quoteBook{
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:10px;
+  background:rgba(0,0,0,0.18);
+  cursor:pointer;
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+.quoteBook.active{
+  border-color:rgba(108,245,192,0.4);
+  box-shadow:0 0 0 1px rgba(108,245,192,0.2) inset;
+}
+.quoteBookCover{
+  width:36px;
+  height:52px;
+  border-radius:8px;
+  border:1px solid var(--line);
+  object-fit:cover;
+  background:rgba(0,0,0,0.3);
+}
+.quoteBookTitle{
+  font-size:12px;
+  font-weight:700;
+  color:var(--text);
 }

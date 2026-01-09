@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BookQuest</title>
   <meta name="theme-color" content="#0f0f10" />
+  <meta http-equiv="Cache-Control" content="no-store" />
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style.css?v=20250111" />
   <link rel="preconnect" href="https://accounts.google.com" />
   <link rel="preconnect" href="https://apis.google.com" />
   <link rel="preconnect" href="https://www.googleapis.com" />
@@ -245,6 +246,14 @@
           <section class="card col-8">
             <h2 data-i18n="sessionTitle">Session</h2>
 
+            <div class="row sessionBookRow">
+              <div class="field">
+                <label for="sessionBookSelect" data-i18n="sessionBookLabel">Active book</label>
+                <select id="sessionBookSelect"></select>
+              </div>
+              <div class="sessionBookCard" id="sessionBookCard"></div>
+            </div>
+
             <div class="row">
               <div class="field">
                 <label for="mode" data-i18n="modeLabel">Mode</label>
@@ -419,7 +428,8 @@
           </section>
 
           <section class="card col-6">
-            <h2 data-i18n="savedQuotesTitle">Saved quotes (active book)</h2>
+            <h2 data-i18n="savedQuotesTitle">Saved quotes</h2>
+            <div class="quoteBooks" id="quoteBooks"></div>
             <div class="list" id="quotesList"></div>
           </section>
         </div>
@@ -446,8 +456,6 @@
               </div>
 
               <div class="syncMeta" id="driveLastBackup">—</div>
-              <div class="notice" data-i18n="driveLogLabel">Recent Drive uploads</div>
-              <div class="list" id="driveSyncLog"></div>
             </div>
 
             <div class="syncCard">
@@ -465,6 +473,18 @@
                     <option value="es-MX" data-i18n="langEs">Spanish (Mexico)</option>
                   </select>
                 </div>
+              </div>
+            </div>
+
+            <div class="syncCard syncCardSubtle">
+              <div class="syncHeader">
+                <div>
+                  <div class="syncTitle" data-i18n="resetTitle">Reset data</div>
+                  <div class="syncCopy" data-i18n="resetCopy">Deletes all local data on this device.</div>
+                </div>
+              </div>
+              <div class="row">
+                <button class="btn danger" id="resetAll" type="button" data-i18n="resetBtn">Delete all data</button>
               </div>
             </div>
           </section>
@@ -526,8 +546,8 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" async defer></script>
-  <script src="./i18n.es.js"></script>
-  <script src="./app.js"></script>
-  <script src="./config.js"></script>
+  <script src="./i18n.es.js?v=20250111"></script>
+  <script src="./config.js?v=20250111"></script>
+  <script src="./app.js?v=20250111"></script>
 </body>
 </html>

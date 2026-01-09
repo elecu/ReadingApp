@@ -67,6 +67,8 @@ const I18N = {
     saveBook: "Save",
     deleteBook: "Delete book",
     sessionTitle: "Session",
+    sessionBookLabel: "Reading book",
+    sessionBookEmpty: "No active books",
     modeLabel: "Mode",
     modeSprint: "Sprint",
     modeOpen: "Open",
@@ -111,7 +113,8 @@ const I18N = {
     saveQuote: "Save quote",
     previewQuote: "Preview PNG",
     downloadQuote: "Download PNG",
-    savedQuotesTitle: "Saved quotes (active book)",
+    savedQuotesTitle: "Saved quotes",
+    quoteStory: "Story PNG",
     settingsTitle: "Settings",
     languageSummary: "Language",
     languageLabel: "Language",
@@ -124,6 +127,7 @@ const I18N = {
     driveSyncNow: "Sync now",
     driveLogLabel: "Recent Drive uploads",
     driveLastBackup: "Backup uploaded {time}",
+    driveLastBackupEmpty: "No backups yet.",
     manualBackupSummary: "Manual backup",
     exportJson: "Export JSON",
     importJson: "Import JSON",
@@ -188,6 +192,26 @@ const I18N = {
     quoteShareApp: "BookQuest",
     quoteCopy: "Copy",
     quoteDelete: "Delete",
+    bookSaved: "Changes saved.",
+    resetTitle: "Reset data",
+    resetCopy: "Deletes all local data on this device.",
+    resetBtn: "Delete all data",
+    resetConfirm1: "This will delete all your local data. Continue?",
+    resetConfirm2: "Final confirmation: delete everything?",
+    resetDone: "All data deleted.",
+    achFirstTitle: "First Step",
+    achFirstDesc: "Finish 1 session",
+    achStreakTitle: "On Fire",
+    achStreakDesc: "Read on 3 different days",
+    achReaderTitle: "Bookworm",
+    achReaderDesc: "Read 100 pages",
+    achFinishTitle: "Finisher",
+    achFinishDesc: "Finish a book",
+    achExpertTitle: "Expert",
+    achExpertDesc: "Read 1000 pages",
+    achAllDone: "All achievements unlocked.",
+    achKeepReading: "Keep reading to unlock.",
+    achNextHint: "Next up",
     dayStreak: "day streak",
     dailyQuestDone: "Done",
     dailyQuestGoal: "Read {pages} pages",
@@ -224,10 +248,14 @@ const state = {
     lastPullISO: null,
     autoMins: 1,
     syncLog: [],
-    expiresAt: 0
+    expiresAt: 0,
+    hasConsent: false
   },
   settings: {
     lang: "en-GB"
+  },
+  ui: {
+    quotesBookId: null
   }
 };
 
@@ -289,12 +317,14 @@ function load(){
   }catch(_){
     return;
   }
-  state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0 }, state.drive || {});
+  state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0, hasConsent:false }, state.drive || {});
   state.drive.token = null;
   state.drive.expiresAt = 0;
+  state.drive.hasConsent = Boolean(state.drive.hasConsent);
   if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
   state.settings = Object.assign({ lang:"en-GB" }, state.settings || {});
   state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
+  state.ui = Object.assign({ quotesBookId: null }, state.ui || {});
   if(!state.books) state.books = {};
 }
 
@@ -311,6 +341,22 @@ function normalizeBooks(){
       b.finishedAt = new Date().toISOString();
     }
   }
+}
+
+function isBookInProgress(b){
+  if(!b) return false;
+  if(!b.totalPages) return true;
+  return (b.currentPage || 0) < b.totalPages;
+}
+
+function readingBooks(){
+  return Object.values(state.books).filter(isBookInProgress);
+}
+
+function ensureQuoteBookSelection(){
+  if(state.ui.quotesBookId && state.books[state.ui.quotesBookId]) return;
+  const ids = Object.keys(state.books || {});
+  state.ui.quotesBookId = state.activeBookId || ids[0] || null;
 }
 
 function ensureDefaultBook(){
@@ -335,6 +381,7 @@ function ensureDefaultBook(){
     finishedAt: null
   };
   state.activeBookId = id;
+  if(!state.ui.quotesBookId) state.ui.quotesBookId = id;
 }
 
 
@@ -351,6 +398,7 @@ function showToast(msg){
 
 function setAuthGate(show, mode = "login"){
   const gate = $("authGate");
+  if(!gate) return;
   const title = gate.querySelector("h2");
   const copy = gate.querySelector(".authCopy");
   const btn = $("authSignIn");
@@ -780,6 +828,38 @@ function refreshBookSelect(){
   sel.value = state.activeBookId;
 }
 
+function renderSessionBookSelect(){
+  const select = $("sessionBookSelect");
+  if(!select) return;
+  const card = $("sessionBookCard");
+  let books = readingBooks();
+  if(!books.length){
+    books = Object.values(state.books);
+  }
+  if(!books.length){
+    select.innerHTML = "";
+    if(card) card.textContent = t("sessionBookEmpty");
+    return;
+  }
+  if(!books.some(b => b.id === state.activeBookId)){
+    state.activeBookId = books[0].id;
+  }
+  select.innerHTML = books.map(b => `<option value="${b.id}">${b.title}</option>`).join("");
+  select.value = state.activeBookId;
+  if(card){
+    const b = activeBook();
+    const cover = b && b.coverData ? `<img class="sessionBookCover" src="${b.coverData}" alt="${b.title}" />` : `<div class="sessionBookCover"></div>`;
+    const meta = b && b.totalPages ? `${b.currentPage || 0}/${b.totalPages}` : "";
+    card.innerHTML = `
+      ${cover}
+      <div>
+        <div>${b ? b.title : t("untitled")}</div>
+        <div class="small muted">${meta}</div>
+      </div>
+    `;
+  }
+}
+
 function renderActiveBook(){
   const b = activeBook();
   if(!b) return;
@@ -827,8 +907,37 @@ function renderGlobal(){
   $("minsRange").textContent = String(mins);
 }
 
+function renderQuoteBooks(){
+  const container = $("quoteBooks");
+  if(!container) return;
+  const books = Object.values(state.books);
+  ensureQuoteBookSelection();
+  if(!books.length){
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = books.map(b => {
+    const active = b.id === state.ui.quotesBookId ? "active" : "";
+    const cover = b.coverData
+      ? `<img class="quoteBookCover" src="${b.coverData}" alt="${b.title}" />`
+      : `<div class="quoteBookCover"></div>`;
+    return `
+      <div class="quoteBook ${active}" data-book-id="${b.id}">
+        ${cover}
+        <div class="quoteBookTitle">${b.title}</div>
+      </div>
+    `;
+  }).join("");
+}
+
 function renderQuotes(){
-  const bookId = state.activeBookId;
+  renderQuoteBooks();
+  ensureQuoteBookSelection();
+  const bookId = state.ui.quotesBookId || state.activeBookId;
+  if(!bookId){
+    $("quotesList").innerHTML = `<div class="muted small">${t("noQuotes")}</div>`;
+    return;
+  }
   const list = state.quotes.filter(q => q.bookId === bookId).slice().reverse();
   $("quotesList").innerHTML = list.map(q => {
     const meta = [q.author, q.page ? `${t("quoteSharePage")}: ${q.page}` : ""].filter(Boolean).join(" · ");
@@ -837,6 +946,7 @@ function renderQuotes(){
         <div class="itemTitle">${q.text}</div>
         <div class="itemMeta">${meta}</div>
         <div class="itemActions">
+          <button class="btn" data-quote-id="${q.id}" data-action="story">${t("quoteStory")}</button>
           <button class="btn" data-quote-id="${q.id}" data-action="copy">${t("quoteCopy")}</button>
           <button class="btn danger" data-quote-id="${q.id}" data-action="delete">${t("quoteDelete")}</button>
         </div>
@@ -849,19 +959,72 @@ function renderDriveLog(){
   const lastBackup = $("driveLastBackup");
   if(lastBackup){
     const time = formatDateTime(state.drive.lastSyncISO);
-    lastBackup.textContent = state.drive.lastSyncISO ? t("driveLastBackup", { time }) : "—";
+    lastBackup.textContent = state.drive.lastSyncISO ? t("driveLastBackup", { time }) : t("driveLastBackupEmpty");
   }
-  const log = state.drive.syncLog || [];
-  $("driveSyncLog").innerHTML = log.slice().reverse().map(iso => {
-    return `<div class="item"><div class="itemTitle">${formatDateTime(iso)}</div></div>`;
-  }).join("") || `<div class="muted small">${t("noUploads")}</div>`;
+}
+
+const ACHIEVEMENTS = [
+  { id: "first", emoji: "🌱", titleKey: "achFirstTitle", descKey: "achFirstDesc", check: () => state.sessions.length >= 1 },
+  { id: "streak3", emoji: "🔥", titleKey: "achStreakTitle", descKey: "achStreakDesc", check: () => {
+      const days = new Set(state.sessions.map(s => (s.endISO || s.startISO || "").slice(0,10)));
+      return days.size >= 3;
+    }
+  },
+  { id: "reader", emoji: "🐛", titleKey: "achReaderTitle", descKey: "achReaderDesc", check: () => {
+      const pages = state.sessions.reduce((sum, s) => sum + (s.pages || 0), 0);
+      return pages >= 100;
+    }
+  },
+  { id: "finish1", emoji: "🏆", titleKey: "achFinishTitle", descKey: "achFinishDesc", check: () => {
+      return Object.values(state.books).some(b => b.totalPages && (b.currentPage || 0) >= b.totalPages);
+    }
+  },
+  { id: "expert", emoji: "🎓", titleKey: "achExpertTitle", descKey: "achExpertDesc", check: () => {
+      const pages = state.sessions.reduce((sum, s) => sum + (s.pages || 0), 0);
+      return pages >= 1000;
+    }
+  }
+];
+
+function renderAchievements(){
+  const unlockedList = $("achUnlockedList");
+  const nextList = $("achNextList");
+  if(!unlockedList || !nextList) return;
+
+  const unlocked = ACHIEVEMENTS.filter(a => a.check());
+  const locked = ACHIEVEMENTS.filter(a => !a.check());
+
+  const unlockedCount = $("achUnlocked");
+  if(unlockedCount) unlockedCount.textContent = `${unlocked.length}/${ACHIEVEMENTS.length}`;
+
+  unlockedList.innerHTML = unlocked.map(a => `
+    <div class="item">
+      <div class="itemTitle">${a.emoji} ${t(a.titleKey)}</div>
+      <div class="itemMeta">${t(a.descKey)}</div>
+    </div>
+  `).join("") || `<div class="muted small">${t("achKeepReading")}</div>`;
+
+  const next = locked[0];
+  const nextHint = $("achNext");
+  if(nextHint){
+    nextHint.textContent = next ? `${next.emoji} ${t(next.titleKey)} — ${t(next.descKey)}` : t("achAllDone");
+  }
+
+  nextList.innerHTML = locked.slice(0,3).map(a => `
+    <div class="item">
+      <div class="itemTitle">🔒 ${t(a.titleKey)}</div>
+      <div class="itemMeta">${t(a.descKey)}</div>
+    </div>
+  `).join("") || `<div class="muted small">${t("achAllDone")}</div>`;
 }
 
 function renderAll(){
   refreshBookSelect();
+  renderSessionBookSelect();
   renderDashboard();
   renderActiveBook();
   renderGlobal();
+  renderAchievements();
   renderQuotes();
   renderDriveLog();
   save();
@@ -923,6 +1086,7 @@ function saveActiveBook(){
   }
   save();
   renderAll();
+  showToast(t("bookSaved"));
 }
 
 function deleteActiveBook(){
@@ -934,6 +1098,9 @@ function deleteActiveBook(){
 
   const ids = Object.keys(state.books);
   state.activeBookId = ids[0] || null;
+  if(state.ui.quotesBookId === b.id){
+    state.ui.quotesBookId = state.activeBookId;
+  }
   ensureDefaultBook();
   save();
   renderAll();
@@ -974,6 +1141,7 @@ function addQuote(){
     createdAt: new Date().toISOString()
   };
   state.quotes.push(quote);
+  state.ui.quotesBookId = state.activeBookId;
   $("quoteText").value = "";
   $("quoteAuthor").value = "";
   $("quotePage").value = "";
@@ -994,53 +1162,27 @@ function handleQuoteActions(e){
     renderAll();
     return;
   }
+  if(action === "story"){
+    const quote = state.quotes[idx];
+    const book = state.books[quote.bookId];
+    drawQuoteStory(quote, book);
+    return;
+  }
   if(action === "copy"){
     navigator.clipboard.writeText(state.quotes[idx].text).catch(()=>{});
     showToast(t("toastUpdated"));
   }
 }
 
-function drawQuoteImage(){
+async function drawQuoteImage(){
   const text = $("quoteText").value.trim();
   if(!text) return;
-  const b = activeBook();
-  const canvas = $("quoteCanvas");
-  const ctx = canvas.getContext("2d");
-  const W = canvas.width;
-  const H = canvas.height;
-
-  ctx.clearRect(0,0,W,H);
-  const gradient = ctx.createLinearGradient(0,0,W,H);
-  gradient.addColorStop(0, "#111119");
-  gradient.addColorStop(1, "#1b1c24");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0,0,W,H);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "600 44px system-ui";
-  ctx.fillText(t("quoteShareLabel"), 80, 140);
-
-  ctx.font = "700 52px system-ui";
-  wrapText(ctx, `“${text}”`, 80, 220, W - 160, 64);
-
-  ctx.fillStyle = "#b6b6bd";
-  ctx.font = "500 34px system-ui";
-  const meta = [
-    b ? `${t("quoteShareBook")}: ${b.title}` : "",
-    $("quoteAuthor").value.trim() ? $("quoteAuthor").value.trim() : "",
-    $("quotePage").value.trim() ? `${t("quoteSharePage")}: ${$("quotePage").value.trim()}` : ""
-  ].filter(Boolean).join(" · ");
-  wrapText(ctx, meta, 80, H - 220, W - 160, 44);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "700 28px system-ui";
-  ctx.fillText(t("quoteShareApp"), 80, H - 100);
-
-  const url = canvas.toDataURL("image/png");
-  $("quotePreview").src = url;
-  $("quotePreview").classList.add("show");
-  $("previewQuote").disabled = false;
-  $("downloadQuote").disabled = false;
+  const quote = {
+    text,
+    author: $("quoteAuthor").value.trim(),
+    page: $("quotePage").value.trim()
+  };
+  await drawQuoteStory(quote, activeBook());
 }
 
 // ---------- Story Generation ----------
@@ -1059,9 +1201,87 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight){
     }
   }
   ctx.fillText(line.trim(), x, y);
+  return y;
 }
 
-function drawStory(scope){
+function loadImage(src){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function drawQuoteStory(quote, book){
+  if(!quote || !quote.text) return;
+  const canvas = $("quoteCanvas");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  ctx.clearRect(0,0,W,H);
+  const gradient = ctx.createLinearGradient(0,0,W,H);
+  gradient.addColorStop(0, "#0f1016");
+  gradient.addColorStop(1, "#151823");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0,0,W,H);
+
+  const coverW = 320;
+  const coverH = 460;
+  const coverX = W - coverW - 80;
+  const coverY = 260;
+
+  if(book && book.coverData){
+    try{
+      const img = await loadImage(book.coverData);
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      ctx.fillRect(coverX - 12, coverY - 12, coverW + 24, coverH + 24);
+      ctx.drawImage(img, coverX, coverY, coverW, coverH);
+    }catch(_){}
+  }else{
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fillRect(coverX, coverY, coverW, coverH);
+  }
+
+  const textX = 90;
+  const textY = 240;
+  const textW = coverX - textX - 40;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 54px system-ui";
+  let y = wrapText(ctx, `“${quote.text}”`, textX, textY, textW, 64);
+
+  const author = quote.author || (book ? book.author : "");
+  if(author){
+    ctx.fillStyle = "#b6b6bd";
+    ctx.font = "500 34px system-ui";
+    y += 70;
+    ctx.fillText(`— ${author}`, textX, y);
+  }
+
+  const meta = [
+    book ? `${t("quoteShareBook")}: ${book.title}` : "",
+    quote.page ? `${t("quoteSharePage")}: ${quote.page}` : ""
+  ].filter(Boolean).join(" · ");
+  if(meta){
+    ctx.fillStyle = "#8f90a0";
+    ctx.font = "500 28px system-ui";
+    wrapText(ctx, meta, textX, H - 220, textW, 40);
+  }
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "600 26px system-ui";
+  ctx.fillText(t("quoteShareApp"), textX, H - 100);
+
+  const url = canvas.toDataURL("image/png");
+  $("quotePreview").src = url;
+  $("quotePreview").classList.add("show");
+  $("previewQuote").disabled = false;
+  $("downloadQuote").disabled = false;
+}
+
+async function drawStory(scope){
   const canvas = $("storyCanvas");
   const ctx = canvas.getContext("2d");
   const W = canvas.width;
@@ -1092,8 +1312,17 @@ function drawStory(scope){
   ctx.fillText(new Date().getFullYear(), 80, 190);
 
   const stats = [];
+  let coverImg = null;
+  let coverBook = null;
   if(scope === "book"){
     const b = activeBook();
+    if(!b) return;
+    coverBook = b;
+    if(b && b.coverData){
+      try{
+        coverImg = await loadImage(b.coverData);
+      }catch(_){}
+    }
     const days = rangeDays();
     const bookAgg = aggregateBookInRange(b.id, days);
     const pace = averagePace(b.id);
@@ -1116,6 +1345,16 @@ function drawStory(scope){
     stats.push([t("storyBooks"), `${Object.keys(state.books).length}`]);
     stats.push([t("storyFinished"), `${finished}`]);
     stats.push([t("storySessions"), `${sessionsCount}`]);
+  }
+
+  if(coverImg && coverBook){
+    const coverW = 300;
+    const coverH = 460;
+    const coverX = W - coverW - 80;
+    const coverY = 260;
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.fillRect(coverX - 10, coverY - 10, coverW + 20, coverH + 20);
+    ctx.drawImage(coverImg, coverX, coverY, coverW, coverH);
   }
 
   let y = 320;
@@ -1214,6 +1453,26 @@ function driveTokenClient(){
   return _tokenClient;
 }
 
+function waitForGoogleClient(timeoutMs = 4000){
+  if(window.google && google.accounts && google.accounts.oauth2){
+    return Promise.resolve(true);
+  }
+  return new Promise(resolve => {
+    const start = Date.now();
+    const timer = setInterval(() => {
+      if(window.google && google.accounts && google.accounts.oauth2){
+        clearInterval(timer);
+        resolve(true);
+        return;
+      }
+      if(Date.now() - start >= timeoutMs){
+        clearInterval(timer);
+        resolve(false);
+      }
+    }, 150);
+  });
+}
+
 function ensureDriveToken(interactive){
   if(state.drive.token && Date.now() < (state.drive.expiresAt || 0)){
     return Promise.resolve(true);
@@ -1228,6 +1487,7 @@ function ensureDriveToken(interactive){
       if(resp && resp.access_token){
         state.drive.token = resp.access_token;
         state.drive.expiresAt = Date.now() + (resp.expires_in || 3600) * 1000 - 60000;
+        state.drive.hasConsent = true;
         save();
         setDriveUI(true);
         resolve(true);
@@ -1284,6 +1544,7 @@ async function drivePull(){
     state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0 }, state.drive || {}, { token, expiresAt, fileId });
     state.settings = Object.assign({ lang:"en-GB" }, state.settings || {});
     state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
+    state.ui = Object.assign({ quotesBookId: null }, state.ui || {});
     if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
     normalizeBooks();
     state.drive.lastPullISO = new Date().toISOString();
@@ -1385,6 +1646,10 @@ function scheduleSilentSignIn(){
     clearTimeout(_authFallbackId);
     _authFallbackId = null;
   }
+  if(!state.drive.hasConsent){
+    setAuthGate(true, "login");
+    return;
+  }
   _authResolved = false;
   _authFallbackId = setTimeout(() => {
     if(!_authResolved){
@@ -1418,6 +1683,12 @@ function cleanupServiceWorkers(){
 async function handleAuthFlow(interactive){
   if(interactive){
     setAuthGate(true, "checking");
+  }
+  const ready = await waitForGoogleClient();
+  if(!ready){
+    _authResolved = true;
+    setAuthGate(true, "login");
+    return;
   }
   const ok = await ensureDriveToken(interactive);
   _authResolved = true;
@@ -1453,6 +1724,7 @@ function importJSON(file){
       const data = JSON.parse(reader.result);
       if(!data || typeof data !== "object") throw new Error("bad");
       Object.assign(state, data);
+      state.ui = Object.assign({ quotesBookId: null }, state.ui || {});
       normalizeBooks();
       ensureDefaultBook();
       applyI18n();
@@ -1585,20 +1857,22 @@ async function runOcr(){
 // ---------- Tabs ----------
 function switchTab(name){
   if(!name) return;
+  const target = document.getElementById(`tab-${name}`);
+  if(!target) return;
   document.querySelectorAll(".tabbtn").forEach(b => b.classList.remove("active"));
   document.querySelectorAll(".tabbtn").forEach(b => {
     if(b.dataset.tab === name) b.classList.add("active");
   });
   document.querySelectorAll(".tab").forEach(tab => {
-    tab.classList.toggle("active", tab.id === `tab-${name}`);
+    tab.classList.toggle("active", tab === target);
   });
 }
 
 function setupTabs(){
-  document.addEventListener("click", (e) => {
-    const btn = e.target.closest(".tabbtn");
-    if(!btn) return;
-    switchTab(btn.dataset.tab);
+  document.querySelectorAll(".tabbtn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      switchTab(btn.dataset.tab);
+    });
   });
 }
 
@@ -1610,9 +1884,20 @@ function bind(){
 
   $("bookSelect").addEventListener("change", ()=>{
     state.activeBookId = $("bookSelect").value;
+    state.ui.quotesBookId = state.activeBookId;
     save();
     renderAll();
   });
+
+  const sessionBookSelect = $("sessionBookSelect");
+  if(sessionBookSelect){
+    sessionBookSelect.addEventListener("change", () => {
+      state.activeBookId = sessionBookSelect.value;
+      state.ui.quotesBookId = state.activeBookId;
+      save();
+      renderAll();
+    });
+  }
 
   $("rangeSelect").addEventListener("change", ()=>{
     renderAll();
@@ -1669,7 +1954,17 @@ function bind(){
     }
   });
   $("quotesList").addEventListener("click", handleQuoteActions);
-  $("previewQuote").addEventListener("click", drawQuoteImage);
+  const quoteBooks = $("quoteBooks");
+  if(quoteBooks){
+    quoteBooks.addEventListener("click", (e) => {
+      const card = e.target.closest(".quoteBook");
+      if(!card) return;
+      state.ui.quotesBookId = card.dataset.bookId;
+      save();
+      renderQuotes();
+    });
+  }
+  $("previewQuote").addEventListener("click", () => { drawQuoteImage(); });
   $("downloadQuote").addEventListener("click", ()=>downloadCanvas($("quoteCanvas"), `quote_${todayKey()}.png`));
 
   $("quoteOcrStart").addEventListener("click", openOcrModal);
@@ -1690,7 +1985,7 @@ function bind(){
   $("ocrCanvas").addEventListener("pointerup", handleOcrPointerUp);
   $("ocrCanvas").addEventListener("pointerleave", handleOcrPointerUp);
 
-  $("makeStory").addEventListener("click", ()=>{
+  $("makeStory").addEventListener("click", () => {
     drawStory($("storyScope").value);
   });
   $("downloadStory").addEventListener("click", ()=>downloadCanvas($("storyCanvas"), `story_${todayKey()}.png`));
@@ -1722,6 +2017,17 @@ function bind(){
   $("dlBookMins").addEventListener("click", ()=>downloadCanvas($("chartMins"), `book_minutes_${todayKey()}.png`));
   $("dlAllPages").addEventListener("click", ()=>downloadCanvas($("chartAllPages"), `all_pages_${todayKey()}.png`));
   $("dlAllMins").addEventListener("click", ()=>downloadCanvas($("chartAllMins"), `all_minutes_${todayKey()}.png`));
+
+  const resetAll = $("resetAll");
+  if(resetAll){
+    resetAll.addEventListener("click", () => {
+      if(!confirm(t("resetConfirm1"))) return;
+      if(!confirm(t("resetConfirm2"))) return;
+      localStorage.removeItem(STORAGE_KEY);
+      showToast(t("resetDone"));
+      setTimeout(()=>location.reload(), 300);
+    });
+  }
 }
 
 // ---------- Init ----------
@@ -1734,8 +2040,8 @@ if(appLangSelect) appLangSelect.value = state.settings.lang || "en-GB";
 setDriveUI(Boolean(state.drive.token));
 setAuthGate(false);
 bind();
+scheduleSilentSignIn();
 togglePagesMode();
 renderAll();
 
 cleanupServiceWorkers();
-scheduleSilentSignIn();
