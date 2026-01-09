@@ -181,28 +181,20 @@ textarea{min-height:96px;resize:vertical}
   font-size:12px;
 }
 
-.sessionBookRow{
-  margin-bottom:6px;
-}
-.sessionBookCard{
+.sessionCoverWrap{
+  margin-top:14px;
   display:flex;
-  align-items:center;
-  gap:10px;
-  min-width:180px;
-  padding:8px 10px;
-  border-radius:12px;
-  border:1px solid var(--line);
-  background:rgba(0,0,0,0.18);
-  color:var(--muted);
-  font-size:12px;
+  justify-content:center;
 }
-.sessionBookCover{
-  width:36px;
-  height:52px;
-  border-radius:8px;
+.sessionCover{
+  width:210px;
+  height:300px;
+  border-radius:16px;
   border:1px solid var(--line);
-  object-fit:cover;
-  background:rgba(0,0,0,0.3);
+  background-color:rgba(0,0,0,0.3);
+  background-size:cover;
+  background-position:center;
+  box-shadow:0 10px 30px rgba(0,0,0,0.5);
 }
 
 .badge{

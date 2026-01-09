@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#0f0f10" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./style.css?v=20250112" />
+  <link rel="stylesheet" href="./style.css?v=20250113" />
   <link rel="preconnect" href="https://accounts.google.com" />
   <link rel="preconnect" href="https://apis.google.com" />
   <link rel="preconnect" href="https://www.googleapis.com" />
@@ -246,12 +246,11 @@
           <section class="card col-8">
             <h2 data-i18n="sessionTitle">Session</h2>
 
-            <div class="row sessionBookRow">
+            <div class="row">
               <div class="field">
                 <label for="sessionBookSelect" data-i18n="sessionBookLabel">Active book</label>
                 <select id="sessionBookSelect"></select>
               </div>
-              <div class="sessionBookCard" id="sessionBookCard"></div>
             </div>
 
             <div class="row">
@@ -326,6 +325,9 @@
                 <div class="k" data-i18n="sessionsLabel">Sessions (range)</div>
                 <div class="v" id="sessionsN">—</div>
               </div>
+            </div>
+            <div class="sessionCoverWrap">
+              <div class="sessionCover" id="sessionCover" aria-hidden="true"></div>
             </div>
           </section>
         </div>
@@ -547,8 +549,8 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" async defer></script>
-  <script src="./i18n.es.js?v=20250112"></script>
-  <script src="./config.js?v=20250112"></script>
-  <script src="./app.js?v=20250112"></script>
+  <script src="./i18n.es.js?v=20250113"></script>
+  <script src="./config.js?v=20250113"></script>
+  <script src="./app.js?v=20250113"></script>
 </body>
 </html>

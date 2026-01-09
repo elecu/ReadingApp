@@ -841,14 +841,14 @@ function refreshBookSelect(){
 function renderSessionBookSelect(){
   const select = $("sessionBookSelect");
   if(!select) return;
-  const card = $("sessionBookCard");
+  const cover = $("sessionCover");
   let books = readingBooks();
   if(!books.length){
     books = Object.values(state.books);
   }
   if(!books.length){
     select.innerHTML = "";
-    if(card) card.textContent = t("sessionBookEmpty");
+    if(cover) cover.style.backgroundImage = "";
     return;
   }
   if(!books.some(b => b.id === state.activeBookId)){
@@ -856,17 +856,9 @@ function renderSessionBookSelect(){
   }
   select.innerHTML = books.map(b => `<option value="${b.id}">${b.title}</option>`).join("");
   select.value = state.activeBookId;
-  if(card){
+  if(cover){
     const b = activeBook();
-    const cover = b && b.coverData ? `<img class="sessionBookCover" src="${b.coverData}" alt="${b.title}" />` : `<div class="sessionBookCover"></div>`;
-    const meta = b && b.totalPages ? `${b.currentPage || 0}/${b.totalPages}` : "";
-    card.innerHTML = `
-      ${cover}
-      <div>
-        <div>${b ? b.title : t("untitled")}</div>
-        <div class="small muted">${meta}</div>
-      </div>
-    `;
+    cover.style.backgroundImage = b && b.coverData ? `url("${b.coverData}")` : "";
   }
 }
 
@@ -941,9 +933,9 @@ function renderQuoteBooks(){
 }
 
 function renderQuotes(){
-  syncQuoteAuthor();
-  renderQuoteBooks();
   ensureQuoteBookSelection();
+  renderQuoteBooks();
+  syncQuoteAuthor();
   const bookId = state.ui.quotesBookId || state.activeBookId;
   if(!bookId){
     $("quotesList").innerHTML = `<div class="muted small">${t("noQuotes")}</div>`;
@@ -969,7 +961,8 @@ function renderQuotes(){
 function syncQuoteAuthor(){
   const input = $("quoteAuthor");
   if(!input) return;
-  const book = activeBook();
+  const bookId = state.ui.quotesBookId || state.activeBookId;
+  const book = state.books[bookId] || activeBook();
   const author = book && book.author ? book.author : "";
   const lastAuto = state.ui.quoteAuthorAuto || "";
   if(!input.value || input.value === lastAuto){
@@ -1155,16 +1148,17 @@ function handleNewCoverInput(input){
 function addQuote(){
   const text = $("quoteText").value.trim();
   if(!text) return;
+  const bookId = state.ui.quotesBookId || state.activeBookId;
   const quote = {
     id: uid(),
-    bookId: state.activeBookId,
+    bookId,
     text,
     author: $("quoteAuthor").value.trim(),
     page: $("quotePage").value.trim(),
     createdAt: new Date().toISOString()
   };
   state.quotes.push(quote);
-  state.ui.quotesBookId = state.activeBookId;
+  state.ui.quotesBookId = bookId;
   $("quoteText").value = "";
   $("quoteAuthor").value = "";
   $("quotePage").value = "";
@@ -1200,12 +1194,14 @@ function handleQuoteActions(e){
 async function drawQuoteImage(){
   const text = $("quoteText").value.trim();
   if(!text) return;
+  const bookId = state.ui.quotesBookId || state.activeBookId;
+  const book = state.books[bookId] || activeBook();
   const quote = {
     text,
     author: $("quoteAuthor").value.trim(),
     page: $("quotePage").value.trim()
   };
-  await drawQuoteStory(quote, activeBook());
+  await drawQuoteStory(quote, book);
 }
 
 // ---------- Story Generation ----------
@@ -1580,7 +1576,7 @@ function ensureDriveToken(interactive){
         resolve(false);
       }
     };
-    client.requestAccessToken({ prompt: interactive ? "consent" : "" });
+    client.requestAccessToken({ prompt: interactive ? "consent" : "none" });
   });
 }
 
