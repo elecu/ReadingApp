@@ -287,6 +287,18 @@ function t(key, vars){
   return str;
 }
 
+function getConsentCookie(){
+  const parts = document.cookie.split("; ").filter(Boolean);
+  const row = parts.find(p => p.startsWith("bq_has_consent="));
+  if(!row) return false;
+  return row.split("=")[1] === "1";
+}
+
+function setConsentCookie(value){
+  const maxAge = value ? 60 * 60 * 24 * 365 : 0;
+  document.cookie = `bq_has_consent=${value ? "1" : "0"}; Max-Age=${maxAge}; Path=/; SameSite=Lax`;
+}
+
 function applyI18n(){
   document.documentElement.lang = state.settings.lang || "en-GB";
   document.querySelectorAll("[data-i18n]").forEach(el => {
@@ -324,7 +336,7 @@ function load(){
   state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0, hasConsent:false }, state.drive || {});
   state.drive.token = null;
   state.drive.expiresAt = 0;
-  state.drive.hasConsent = Boolean(state.drive.hasConsent);
+  state.drive.hasConsent = Boolean(state.drive.hasConsent) || getConsentCookie();
   if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
   state.settings = Object.assign({ lang:"en-GB" }, state.settings || {});
   state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
@@ -1149,18 +1161,18 @@ function addQuote(){
   const text = $("quoteText").value.trim();
   if(!text) return;
   const bookId = state.ui.quotesBookId || state.activeBookId;
+  const book = state.books[bookId] || activeBook();
   const quote = {
     id: uid(),
     bookId,
     text,
-    author: $("quoteAuthor").value.trim(),
+    author: book && book.author ? book.author : "",
     page: $("quotePage").value.trim(),
     createdAt: new Date().toISOString()
   };
   state.quotes.push(quote);
   state.ui.quotesBookId = bookId;
   $("quoteText").value = "";
-  $("quoteAuthor").value = "";
   $("quotePage").value = "";
   save();
   renderAll();
@@ -1198,7 +1210,7 @@ async function drawQuoteImage(){
   const book = state.books[bookId] || activeBook();
   const quote = {
     text,
-    author: $("quoteAuthor").value.trim(),
+    author: book && book.author ? book.author : "",
     page: $("quotePage").value.trim()
   };
   await drawQuoteStory(quote, book);
@@ -1569,6 +1581,7 @@ function ensureDriveToken(interactive){
         state.drive.token = resp.access_token;
         state.drive.expiresAt = Date.now() + (resp.expires_in || 3600) * 1000 - 60000;
         state.drive.hasConsent = true;
+        setConsentCookie(true);
         save();
         setDriveUI(true);
         resolve(true);
@@ -1650,6 +1663,7 @@ function disconnectDrive(){
   state.drive.token = null;
   state.drive.expiresAt = 0;
   state.drive.hasConsent = false;
+  setConsentCookie(false);
   save();
   setDriveUI(false);
   if(_driveAutoId){
@@ -1741,7 +1755,6 @@ function scheduleDriveAuto(){
 }
 
 function scheduleSilentSignIn(){
-  let attempts = 0;
   if(_authFallbackId){
     clearTimeout(_authFallbackId);
     _authFallbackId = null;
@@ -1751,26 +1764,13 @@ function scheduleSilentSignIn(){
     return;
   }
   _authResolved = false;
-  _authFallbackId = setTimeout(() => {
-    if(!_authResolved){
-      setAuthGate(true, "login");
+  silentSignIn().then(ok => {
+    _authResolved = true;
+    if(!ok){
+      setDriveUI(false);
+      setAuthGate(false);
     }
-  }, 1200);
-  const timer = setInterval(() => {
-    attempts += 1;
-    if(window.google && google.accounts && google.accounts.oauth2){
-      clearInterval(timer);
-      handleAuthFlow(false);
-      return;
-    }
-    if(attempts >= 10){
-      clearInterval(timer);
-      if(!_authResolved){
-        setAuthGate(true, "login");
-        _authResolved = true;
-      }
-    }
-  }, 500);
+  });
 }
 
 function cleanupServiceWorkers(){
@@ -1804,6 +1804,18 @@ async function handleAuthFlow(interactive){
   setAuthGate(false);
   await drivePull();
   scheduleDriveAuto();
+}
+
+async function silentSignIn(){
+  const ready = await waitForGoogleClient();
+  if(!ready) return false;
+  const ok = await ensureDriveToken(false);
+  if(!ok) return false;
+  setDriveUI(true);
+  setAuthGate(false);
+  await drivePull();
+  scheduleDriveAuto();
+  return true;
 }
 
 // ---------- Manual Sync ----------
