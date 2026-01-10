@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = "bookquest_state_v3";
 const DRIVE_FILENAME = "bookquest_state.json";
 const DEFAULT_CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
+const IS_TEST = typeof window !== "undefined" && Boolean(window.BOOKQUEST_TEST);
 
 const I18N = {
   "en-GB": {
@@ -322,6 +323,9 @@ function save(){
     snapshot.drive.token = null;
     snapshot.drive.expiresAt = 0;
   }
+  if(snapshot.timer){
+    snapshot.timer.intervalId = null;
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
 }
 function load(){
@@ -342,6 +346,30 @@ function load(){
   state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
   state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
   if(!state.books) state.books = {};
+}
+
+function normalizeTimerState(){
+  const defaults = {
+    running: false,
+    mode: "sprint",
+    sprintMins: 8,
+    startMs: 0,
+    elapsedMs: 0,
+    intervalId: null,
+    bell: false,
+    paused: false
+  };
+  state.timer = Object.assign({}, defaults, state.timer || {});
+  if(!Number.isFinite(state.timer.sprintMins) || state.timer.sprintMins < 1) state.timer.sprintMins = 8;
+  if(!Number.isFinite(state.timer.elapsedMs) || state.timer.elapsedMs < 0) state.timer.elapsedMs = 0;
+  if(!Number.isFinite(state.timer.startMs) || state.timer.startMs < 0) state.timer.startMs = 0;
+  if(!["sprint", "open", "flow"].includes(state.timer.mode)) state.timer.mode = "sprint";
+  state.timer.intervalId = null;
+  if(state.timer.running && !state.timer.startMs && state.timer.elapsedMs === 0){
+    state.timer.running = false;
+    state.timer.paused = false;
+    state.timer.bell = false;
+  }
 }
 
 function normalizeBooks(){
@@ -480,6 +508,93 @@ function beep(){
   }catch(_){ }
 }
 
+function startTimerInterval(){
+  if(state.timer.intervalId){
+    clearInterval(state.timer.intervalId);
+  }
+  state.timer.intervalId = setInterval(updateTimerDisplay, 250);
+}
+
+function stopTimerInterval(){
+  if(state.timer.intervalId){
+    clearInterval(state.timer.intervalId);
+    state.timer.intervalId = null;
+  }
+}
+
+function updateTimerDisplay(){
+  if(!state.timer.running) return;
+  const timerBig = $("timerBig");
+  const timerHint = $("timerHint");
+  const hyperBtn = $("hyper");
+  if(!timerBig || !timerHint || !hyperBtn) return;
+
+  if(!state.timer.paused){
+    if(!state.timer.startMs){
+      state.timer.startMs = Date.now() - (state.timer.elapsedMs || 0);
+    }
+    state.timer.elapsedMs = Date.now() - state.timer.startMs;
+  }
+
+  if(state.timer.mode === "sprint"){
+    const target = state.timer.sprintMins * 60 * 1000;
+    const remaining = target - state.timer.elapsedMs;
+
+    if(remaining <= 0){
+      if(!state.timer.bell){
+        state.timer.bell = true;
+        if(!state.timer.paused) beep();
+      }
+      timerBig.textContent = "+" + formatMMSS(-remaining);
+      timerHint.textContent = state.timer.paused ? t("timerPaused") : t("timerSprintDone");
+      hyperBtn.disabled = false;
+    }else{
+      state.timer.bell = false;
+      timerBig.textContent = formatMMSS(remaining);
+      timerHint.textContent = state.timer.paused ? t("timerPaused") : t("timerSprintHint");
+      hyperBtn.disabled = true;
+    }
+  }else{
+    timerBig.textContent = formatMMSS(state.timer.elapsedMs);
+    timerHint.textContent = state.timer.paused ? t("timerPaused") : t("timerFlowHint");
+    hyperBtn.disabled = true;
+  }
+}
+
+function applyTimerState(){
+  const modeSelect = $("mode");
+  const sprintInput = $("sprintMins");
+  if(modeSelect){
+    modeSelect.value = state.timer.mode === "sprint" ? "sprint" : "open";
+  }
+  if(sprintInput){
+    sprintInput.value = Number(state.timer.sprintMins || 8);
+  }
+
+  if(!state.timer.running){
+    stopTimerInterval();
+    $("start").disabled = false;
+    $("pause").disabled = true;
+    $("finish").disabled = true;
+    $("hyper").disabled = true;
+    $("pause").textContent = t("pause");
+    $("timerBig").textContent = "00:00";
+    $("timerHint").textContent = "";
+    return;
+  }
+
+  $("start").disabled = true;
+  $("pause").disabled = false;
+  $("finish").disabled = false;
+  $("pause").textContent = state.timer.paused ? t("resume") : t("pause");
+  updateTimerDisplay();
+  if(state.timer.paused){
+    stopTimerInterval();
+  }else{
+    startTimerInterval();
+  }
+}
+
 function startTimer(){
   if(state.timer.running) return;
   state.timer.mode = $("mode").value;
@@ -489,53 +604,20 @@ function startTimer(){
   state.timer.elapsedMs = 0;
   state.timer.bell = false;
   state.timer.paused = false;
-
-  $("start").disabled = true;
-  $("pause").disabled = false;
-  $("finish").disabled = false;
-  $("hyper").disabled = true;
-
-  const tick = () => {
-    if(!state.timer.running || state.timer.paused) return;
-    state.timer.elapsedMs = Date.now() - state.timer.startMs;
-
-    if(state.timer.mode === "sprint"){
-      const target = state.timer.sprintMins * 60 * 1000;
-      const remaining = target - state.timer.elapsedMs;
-
-      if(remaining <= 0 && !state.timer.bell){
-        state.timer.bell = true;
-        beep();
-        $("timerHint").textContent = t("timerSprintDone");
-        $("hyper").disabled = false;
-      }
-      if(!state.timer.bell){
-        $("timerBig").textContent = formatMMSS(remaining);
-        $("timerHint").textContent = t("timerSprintHint");
-      }else{
-        $("timerBig").textContent = "+" + formatMMSS(-remaining);
-      }
-    }else{
-      $("timerBig").textContent = formatMMSS(state.timer.elapsedMs);
-      $("timerHint").textContent = t("timerFlowHint");
-    }
-  };
-
-  tick();
-  state.timer.intervalId = setInterval(tick, 250);
+  applyTimerState();
   save();
 }
 
 function togglePause(){
   if(!state.timer.running) return;
-  state.timer.paused = !state.timer.paused;
   if(state.timer.paused){
-    $("pause").textContent = t("resume");
-    $("timerHint").textContent = t("timerPaused");
-  }else{
+    state.timer.paused = false;
     state.timer.startMs = Date.now() - state.timer.elapsedMs;
-    $("pause").textContent = t("pause");
+  }else{
+    state.timer.elapsedMs = Date.now() - state.timer.startMs;
+    state.timer.paused = true;
   }
+  applyTimerState();
   save();
 }
 
@@ -562,10 +644,7 @@ function finishSession(){
 
   state.timer.running = false;
   state.timer.paused = false;
-  if(state.timer.intervalId){
-    clearInterval(state.timer.intervalId);
-    state.timer.intervalId = null;
-  }
+  stopTimerInterval();
 
   $("start").disabled = false;
   $("pause").disabled = true;
@@ -1615,6 +1694,9 @@ function sanitizeStateForDrive(){
     payload.drive.token = null;
     payload.drive.expiresAt = 0;
   }
+  if(payload.timer){
+    payload.timer.intervalId = null;
+  }
   return payload;
 }
 
@@ -1643,6 +1725,7 @@ async function drivePull(){
     state.settings = Object.assign({ lang:"en-GB" }, state.settings || {});
     state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
     state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
+    normalizeTimerState();
     if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
     state.drive.hasConsent = hadConsent || state.drive.hasConsent || Boolean(token);
     normalizeBooks();
@@ -1652,6 +1735,7 @@ async function drivePull(){
     applyI18n();
     const appLangSelect = $("appLang");
     if(appLangSelect) appLangSelect.value = state.settings.lang || "en-GB";
+    applyTimerState();
     save();
     renderAll();
     setDriveUI(true);
@@ -1840,9 +1924,11 @@ function importJSON(file){
       if(!data || typeof data !== "object") throw new Error("bad");
       Object.assign(state, data);
       state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
+      normalizeTimerState();
       normalizeBooks();
       ensureDefaultBook();
       applyI18n();
+      applyTimerState();
       save();
       renderAll();
       showToast(t("toastImported"));
@@ -2154,17 +2240,31 @@ function bind(){
 }
 
 // ---------- Init ----------
-load();
-normalizeBooks();
-ensureDefaultBook();
-applyI18n();
-const appLangSelect = $("appLang");
-if(appLangSelect) appLangSelect.value = state.settings.lang || "en-GB";
-setDriveUI(Boolean(state.drive.token));
-setAuthGate(false);
-bind();
-scheduleSilentSignIn();
-togglePagesMode();
-renderAll();
+if(typeof window !== "undefined"){
+  window.BOOKQUEST_TEST_API = {
+    state,
+    normalizeTimerState,
+    applyTimerState,
+    updateTimerDisplay,
+    formatMMSS
+  };
+}
 
-cleanupServiceWorkers();
+if(!IS_TEST){
+  load();
+  normalizeTimerState();
+  normalizeBooks();
+  ensureDefaultBook();
+  applyI18n();
+  const appLangSelect = $("appLang");
+  if(appLangSelect) appLangSelect.value = state.settings.lang || "en-GB";
+  setDriveUI(Boolean(state.drive.token));
+  setAuthGate(false);
+  bind();
+  applyTimerState();
+  scheduleSilentSignIn();
+  togglePagesMode();
+  renderAll();
+
+  cleanupServiceWorkers();
+}
