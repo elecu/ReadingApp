@@ -4,6 +4,33 @@ const STORAGE_KEY = "bookquest_state_v3";
 const DRIVE_FILENAME = "bookquest_state.json";
 const DEFAULT_CLIENT_ID = "195858719729-36npag3q1fclmj2pnqckk4dgcblqu1f9.apps.googleusercontent.com";
 const IS_TEST = typeof window !== "undefined" && Boolean(window.BOOKQUEST_TEST);
+const DRIVE_SESSION_KEY = "bookquest_drive_session_v1";
+const QUEST_THRESHOLDS = [0.1, 0.3, 0.5, 0.7, 0.9];
+const QUEST_MIN_OBJECTS = 5;
+const QUEST_MAX_OBJECTS = 10;
+const WEBLLM_IMPORT_URL = "https://esm.run/@mlc-ai/web-llm";
+const WEBLLM_MODEL_ID = "Qwen2-0.5B-Instruct-q4f16_1-MLC";
+const WEBLLM_MODEL_SIZE_MB = 290;
+const QUEST_FALLBACK_POOL = [
+  "bookmark","library card","paperback","hardcover","dust jacket",
+  "page","chapter","footnote","index","glossary",
+  "notebook","journal","diary","pen","pencil",
+  "highlighter","sticky note","paper clip","envelope","letter",
+  "map","key","candle","lamp","magnifying glass"
+];
+const QUEST_ABSTRACT_TERMS = new Set(["love","life","time","world","destiny","meaning","truth","power"]);
+const QUEST_STOPWORDS = new Set([
+  "a","an","the","and","or","but","if","so","no","yes","to","of","in","on","at","by","as","is","it","its","into",
+  "from","for","with","that","this","these","those","there","here","then","than","when","where","which","what","who",
+  "you","your","yours","we","our","ours","they","their","theirs","he","him","his","she","her","hers","i","me","my",
+  "mine","us","was","were","be","been","being","are","am","do","does","did","done","can","could","would","should",
+  "may","might","must","also","just","like","some","more","most","such","over","under","between","within","without",
+  "before","after","during","across","about","up","down","out","off","back","front","left","right",
+  "el","la","los","las","un","una","unos","unas","y","o","u","de","del","al","que","como","por","para","con","sin",
+  "sobre","entre","cuando","donde","quien","quienes","cual","cuales","su","sus","mi","mis","tu","tus","nuestro",
+  "nuestra","nuestros","nuestras","ellos","ellas","ella","lo","le","les","se","es","son","era","eran","fue","fueron",
+  "ser","estar","hay","hace","hacia","desde","hasta","mas","muy","ya","en"
+]);
 
 const I18N = {
   "en-GB": {
@@ -39,6 +66,22 @@ const I18N = {
     makeStory: "Generate Story PNG",
     downloadStory: "Download Story PNG",
     activeBookTitle: "Active book",
+    questTitle: "Quest objects",
+    vaultTitle: "Vault",
+    vaultObjects: "Objects",
+    aiTitle: "On-device AI",
+    aiToggleLabel: "Generate quests with on-device AI (downloads ~290 MB)",
+    aiClearModel: "Clear downloaded model",
+    aiClearHint: "Clears on-device model files (may require a refresh).",
+    aiReload: "Reload",
+    aiClearToast: "Refresh the page to fully release storage.",
+    aiStatusFallback: "AI not available → using fallback.",
+    aiStatusReady: "On-device AI ready.",
+    aiStatusUnavailable: "WebGPU not available.",
+    aiStatusDisabled: "On-device AI is off.",
+    aiStatusDownloading: "Downloading model... {pct}%",
+    aiStatusOffline: "Offline. Using fallback quests.",
+    aiStatusIdle: "Ready to download when needed.",
     markFinished: "Mark finished",
     shareFinish: "Share finish",
     finishNotice: "Finishing is based on reaching total pages (or marking manually).",
@@ -256,7 +299,8 @@ const state = {
     hasConsent: false
   },
   settings: {
-    lang: "en-GB"
+    lang: "en-GB",
+    aiEnabled: false
   },
   ui: {
     quotesBookId: null,
@@ -270,6 +314,13 @@ let _ocrState = null;
 let _pendingNewCoverData = "";
 let _authResolved = false;
 let _authFallbackId = null;
+const _googleBooksPending = new Set();
+const _questPending = new Set();
+let _webLLM = null;
+let _webLLMEngine = null;
+let _webLLMLoading = false;
+let _webLLMProgress = 0;
+let _webLLMLastStatus = "";
 
 function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
 function todayKey(d=new Date()){ return d.toISOString().slice(0,10); }
@@ -286,6 +337,60 @@ function t(key, vars){
     }
   }
   return str;
+}
+
+function getBackendUrl(){
+  if(typeof window === "undefined") return "";
+  const raw = (window.BOOKQUEST_CONFIG && window.BOOKQUEST_CONFIG.backendUrl) || "";
+  return raw.replace(/\/+$/, "");
+}
+
+function backendEnabled(){
+  return Boolean(getBackendUrl());
+}
+
+function getDriveSession(){
+  try{
+    return localStorage.getItem(DRIVE_SESSION_KEY) || "";
+  }catch(_){
+    return "";
+  }
+}
+
+function setDriveSession(sessionId){
+  if(!sessionId) return;
+  try{
+    localStorage.setItem(DRIVE_SESSION_KEY, sessionId);
+  }catch(_){}
+}
+
+function clearDriveSession(){
+  try{
+    localStorage.removeItem(DRIVE_SESSION_KEY);
+  }catch(_){}
+}
+
+function captureDriveSessionFromUrl(){
+  if(typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  const sessionId = url.searchParams.get("session");
+  if(!sessionId) return;
+  setDriveSession(sessionId);
+  url.searchParams.delete("session");
+  window.history.replaceState({}, "", url.toString());
+}
+
+function syncDriveConsentFromSession(){
+  if(backendEnabled() && getDriveSession()){
+    state.drive.hasConsent = true;
+  }
+}
+
+function startBackendAuth(){
+  const backend = getBackendUrl();
+  if(!backend || typeof window === "undefined") return;
+  const returnTo = window.location.href;
+  window.location.href = `${backend}/auth/start?return=${encodeURIComponent(returnTo)}`;
 }
 
 function getConsentCookie(){
@@ -313,6 +418,7 @@ function applyI18n(){
 function setLanguage(lang){
   state.settings.lang = lang;
   applyI18n();
+  updateAiUI();
   renderAll();
   save();
 }
@@ -342,10 +448,12 @@ function load(){
   state.drive.expiresAt = 0;
   state.drive.hasConsent = Boolean(state.drive.hasConsent) || getConsentCookie();
   if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
-  state.settings = Object.assign({ lang:"en-GB" }, state.settings || {});
+  state.settings = Object.assign({ lang:"en-GB", aiEnabled:false }, state.settings || {});
+  state.settings.aiEnabled = Boolean(state.settings.aiEnabled);
   state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
   state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
   if(!state.books) state.books = {};
+  syncDriveConsentFromSession();
 }
 
 function normalizeTimerState(){
@@ -381,9 +489,546 @@ function normalizeBooks(){
     b.edition = b.edition || "";
     b.coverData = b.coverData || "";
     b.rating = b.rating || "";
+    if(typeof b.synopsis !== "string") b.synopsis = b.synopsis ? String(b.synopsis) : "";
+    ensureGoogleBooksDefaults(b);
+    ensureQuestDefaults(b);
     if(b.totalPages && (b.currentPage || 0) >= b.totalPages && !b.finishedAt){
       b.finishedAt = new Date().toISOString();
     }
+  }
+}
+
+function stripHtml(input){
+  if(!input) return "";
+  return String(input).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeMatchStr(input){
+  return String(input || "")
+    .toLowerCase()
+    .replace(/['\u2019`]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function googleBooksStrictMatch(userTitle, userAuthor, candidateTitle, candidateAuthors){
+  const ut = normalizeMatchStr(userTitle);
+  const ua = normalizeMatchStr(userAuthor);
+  const ct = normalizeMatchStr(candidateTitle);
+  if(!ut || !ua || !ct) return false;
+  const titleMatch = ct.includes(ut) || ut.includes(ct);
+  if(!titleMatch) return false;
+  const authors = Array.isArray(candidateAuthors) ? candidateAuthors : (candidateAuthors ? [candidateAuthors] : []);
+  for(const author of authors){
+    const ca = normalizeMatchStr(author);
+    if(!ca) continue;
+    if(ca.includes(ua) || ua.includes(ca)) return true;
+  }
+  return false;
+}
+
+function googleBooksMatchScore(userTitle, userAuthor, candidateTitle, candidateAuthors){
+  const ut = normalizeMatchStr(userTitle);
+  const ua = normalizeMatchStr(userAuthor);
+  const ct = normalizeMatchStr(candidateTitle);
+  if(!ut || !ua || !ct) return -1;
+  let score = 0;
+  if(ct === ut) score += 3;
+  else if(ct.includes(ut) || ut.includes(ct)) score += 1;
+  const authors = Array.isArray(candidateAuthors) ? candidateAuthors : (candidateAuthors ? [candidateAuthors] : []);
+  for(const author of authors){
+    const ca = normalizeMatchStr(author);
+    if(!ca) continue;
+    if(ca === ua) score += 3;
+    else if(ca.includes(ua) || ua.includes(ca)) score += 1;
+  }
+  return score;
+}
+
+function pickGoogleBooksMatch(items, title, author){
+  let best = null;
+  let bestScore = -1;
+  for(const item of items || []){
+    const info = item && item.volumeInfo ? item.volumeInfo : {};
+    if(!googleBooksStrictMatch(title, author, info.title, info.authors)) continue;
+    const score = googleBooksMatchScore(title, author, info.title, info.authors);
+    if(score > bestScore){
+      bestScore = score;
+      best = item;
+    }
+  }
+  return best;
+}
+
+function hashString(input){
+  let h = 2166136261;
+  const str = String(input || "");
+  for(let i=0;i<str.length;i++){
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed){
+  let t = seed >>> 0;
+  return function(){
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function questSeedForBook(book){
+  const source = (book && book.id) ? book.id : `${book && book.title ? book.title : ""}|${book && book.author ? book.author : ""}`;
+  return hashString(source);
+}
+
+function pickQuestFallbackObjects(book){
+  const pool = QUEST_FALLBACK_POOL.slice();
+  const rng = mulberry32(questSeedForBook(book));
+  for(let i=pool.length-1;i>0;i--){
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = pool[i];
+    pool[i] = pool[j];
+    pool[j] = tmp;
+  }
+  return pool.slice(0, 5);
+}
+
+function questThresholdsForBook(book){
+  const thresholds = book && book.quest && Array.isArray(book.quest.thresholds) && book.quest.thresholds.length
+    ? book.quest.thresholds
+    : QUEST_THRESHOLDS;
+  const objCount = book && book.quest && Array.isArray(book.quest.objects) ? book.quest.objects.length : 0;
+  if(objCount && thresholds.length !== objCount){
+    return Array.from({ length: objCount }, (_, i) => (i + 1) / (objCount + 1));
+  }
+  return thresholds;
+}
+
+function questProgress(book){
+  if(!book || !book.totalPages) return 0;
+  return clamp((book.currentPage || 0) / book.totalPages, 0, 1);
+}
+
+function questUnlockedCount(book){
+  const thresholds = questThresholdsForBook(book);
+  const progress = questProgress(book);
+  let count = 0;
+  for(const tVal of thresholds){
+    if(progress >= tVal) count += 1;
+  }
+  const maxCount = book && book.quest && Array.isArray(book.quest.objects) ? book.quest.objects.length : 0;
+  return maxCount ? Math.min(count, maxCount) : count;
+}
+
+function ensureQuestDefaults(book){
+  if(!book.quest || typeof book.quest !== "object"){
+    book.quest = { objects: [], generatedAt: "", method: "", thresholds: QUEST_THRESHOLDS.slice() };
+    return;
+  }
+  if(!Array.isArray(book.quest.objects)) book.quest.objects = [];
+  if(typeof book.quest.generatedAt !== "string") book.quest.generatedAt = "";
+  if(typeof book.quest.method !== "string") book.quest.method = "";
+  if(!Array.isArray(book.quest.thresholds) || !book.quest.thresholds.length){
+    book.quest.thresholds = QUEST_THRESHOLDS.slice();
+  }
+}
+
+function ensureGoogleBooksDefaults(book){
+  if(!book.googleBooks || typeof book.googleBooks !== "object"){
+    book.googleBooks = { id: "", fetchedAt: "" };
+    return;
+  }
+  if(typeof book.googleBooks.id !== "string") book.googleBooks.id = "";
+  if(typeof book.googleBooks.fetchedAt !== "string") book.googleBooks.fetchedAt = "";
+}
+
+function sanitizeQuestObjects(raw){
+  if(!Array.isArray(raw) || !raw.length) return null;
+  const cleaned = [];
+  for(const item of raw){
+    if(typeof item !== "string") continue;
+    let val = item.trim().toLowerCase().replace(/\s+/g, " ");
+    if(val.length < 2 || val.length > 20) continue;
+    if(!/^[a-z][a-z\s-]*$/.test(val)) continue;
+    cleaned.push(val);
+  }
+  const unique = Array.from(new Set(cleaned));
+  if(unique.length < QUEST_MIN_OBJECTS) return null;
+  if(unique.length > QUEST_MAX_OBJECTS) return unique.slice(0, QUEST_MAX_OBJECTS);
+  return unique;
+}
+
+function questPromptForSynopsis(){
+  const base = [
+    "You are given a book synopsis.",
+    `Extract up to ${QUEST_MAX_OBJECTS} concrete physical objects that are clearly associated with the story.`,
+    "Avoid spoilers and do not reveal plot twists or endings.",
+    "Avoid abstract concepts (no emotions, no ideas).",
+    "Order the objects roughly by story progression.",
+    `Return ONLY a JSON array of ${QUEST_MIN_OBJECTS}-${QUEST_MAX_OBJECTS} short object names in English, lowercase.`
+  ].join(" ");
+  return base;
+}
+
+function heuristicQuestObjectsFromSynopsis(synopsis){
+  const text = stripHtml(synopsis || "").toLowerCase();
+  const words = text.match(/[a-zA-Z]+/g) || [];
+  const picked = [];
+  const seen = new Set();
+  for(const wordRaw of words){
+    const word = wordRaw.toLowerCase();
+    if(word.length < 4) continue;
+    if(QUEST_STOPWORDS.has(word)) continue;
+    if(QUEST_ABSTRACT_TERMS.has(word)) continue;
+    if(seen.has(word)) continue;
+    seen.add(word);
+    picked.push(word);
+    if(picked.length >= QUEST_MIN_OBJECTS) break;
+  }
+  return picked;
+}
+
+function webgpuSupported(){
+  return typeof navigator !== "undefined" && Boolean(navigator.gpu);
+}
+
+function isOnline(){
+  if(typeof navigator === "undefined") return true;
+  return navigator.onLine !== false;
+}
+
+function updateAiUI(){
+  const toggle = $("aiToggle");
+  const status = $("aiDownloadStatus");
+  const bar = $("aiDownloadBar");
+  if(toggle){
+    toggle.checked = Boolean(state.settings.aiEnabled);
+    toggle.disabled = !webgpuSupported();
+  }
+  if(!status) return;
+  let text = "";
+  if(!state.settings.aiEnabled){
+    text = t("aiStatusDisabled");
+  }else if(!webgpuSupported()){
+    text = `${t("aiStatusUnavailable")} ${t("aiStatusFallback")}`;
+  }else if(!isOnline()){
+    text = `${t("aiStatusOffline")} ${t("aiStatusFallback")}`;
+  }else if(_webLLMEngine){
+    text = t("aiStatusReady");
+  }else if(_webLLMLoading){
+    const pct = Math.max(0, Math.min(100, Math.round((_webLLMProgress || 0) * 100)));
+    text = `${t("aiStatusDownloading", { pct: String(pct) })} ${t("aiStatusFallback")}`;
+    if(_webLLMLastStatus){
+      text = `${text} ${_webLLMLastStatus}`;
+    }
+  }else{
+    text = `${t("aiStatusIdle")} ${t("aiStatusFallback")}`;
+  }
+  status.textContent = text;
+  if(bar){
+    const pct = Math.max(0, Math.min(100, Math.round((_webLLMProgress || 0) * 100)));
+    bar.style.width = `${pct}%`;
+    const wrap = bar.parentElement;
+    if(wrap){
+      wrap.classList.toggle("show", _webLLMLoading);
+    }
+  }
+}
+
+function extractJsonArray(text){
+  if(!text) return null;
+  let cleaned = String(text).trim();
+  cleaned = cleaned.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "");
+  const start = cleaned.indexOf("[");
+  const end = cleaned.lastIndexOf("]");
+  if(start === -1 || end === -1 || end <= start) return null;
+  const slice = cleaned.slice(start, end + 1);
+  try{
+    return JSON.parse(slice);
+  }catch(_){
+    return null;
+  }
+}
+
+function buildWebLLMAppConfig(webllm){
+  const base = webllm && webllm.prebuiltAppConfig ? webllm.prebuiltAppConfig : {};
+  return Object.assign({}, base, { useIndexedDBCache: true });
+}
+
+async function loadWebLLMLibrary(){
+  if(_webLLM) return _webLLM;
+  _webLLM = await import(WEBLLM_IMPORT_URL);
+  return _webLLM;
+}
+
+async function startWebLLMLoad(){
+  if(_webLLMLoading || _webLLMEngine) return _webLLMEngine;
+  if(!state.settings.aiEnabled || !webgpuSupported() || !isOnline()) return null;
+  _webLLMLoading = true;
+  _webLLMProgress = 0;
+  updateAiUI();
+  try{
+    const webllm = await loadWebLLMLibrary();
+    const appConfig = buildWebLLMAppConfig(webllm);
+    const list = appConfig && Array.isArray(appConfig.model_list) ? appConfig.model_list : [];
+    if(!list.some(m => m && m.model_id === WEBLLM_MODEL_ID)){
+      throw new Error("model not available");
+    }
+    const initProgressCallback = (report) => {
+      if(typeof report === "number"){
+        _webLLMProgress = report;
+        _webLLMLastStatus = "";
+      }else if(report && typeof report.progress === "number"){
+        _webLLMProgress = report.progress;
+        _webLLMLastStatus = report.text || "";
+      }else if(report && typeof report.percentage === "number"){
+        _webLLMProgress = report.percentage / 100;
+        _webLLMLastStatus = report.text || "";
+      }else if(report && typeof report.progress === "string"){
+        const pct = Number(report.progress);
+        if(Number.isFinite(pct)) _webLLMProgress = pct / 100;
+        _webLLMLastStatus = report.text || "";
+      }else if(report && report.text){
+        _webLLMLastStatus = report.text;
+      }
+      updateAiUI();
+    };
+    _webLLMEngine = await webllm.CreateMLCEngine(WEBLLM_MODEL_ID, { initProgressCallback, appConfig });
+    _webLLMProgress = 1;
+    _webLLMLastStatus = "";
+    return _webLLMEngine;
+  }catch(_){
+    _webLLMEngine = null;
+    return null;
+  }finally{
+    _webLLMLoading = false;
+    updateAiUI();
+  }
+}
+
+async function requestWebGPUQuestObjects(book){
+  if(!_webLLMEngine) return null;
+  const synopsis = book.synopsis || "";
+  const messages = [
+    { role: "system", content: questPromptForSynopsis() },
+    { role: "user", content: `Title: ${book.title || ""}\nAuthor: ${book.author || ""}\nSynopsis: ${stripHtml(synopsis)}` }
+  ];
+  try{
+    const result = await _webLLMEngine.chat.completions.create({
+      messages,
+      temperature: 0.2,
+      max_tokens: 220
+    });
+    const text = result && result.choices && result.choices[0] && result.choices[0].message
+      ? result.choices[0].message.content
+      : "";
+    return extractJsonArray(text);
+  }catch(_){
+    return null;
+  }
+}
+
+async function clearWebLLMCache(){
+  try{
+    if(_webLLMEngine && _webLLMEngine.dispose){
+      await _webLLMEngine.dispose();
+    }
+  }catch(_){}
+  _webLLMEngine = null;
+  _webLLMLoading = false;
+  _webLLMProgress = 0;
+  _webLLMLastStatus = "";
+  try{
+    const webllm = await loadWebLLMLibrary();
+    if(webllm && typeof webllm.deleteModel === "function"){
+      await webllm.deleteModel(WEBLLM_MODEL_ID);
+    }else if(webllm && typeof webllm.deleteModelAll === "function"){
+      await webllm.deleteModelAll();
+    }
+  }catch(_){}
+
+  if(typeof caches !== "undefined"){
+    try{
+      const keys = await caches.keys();
+      await Promise.all(keys.filter(k => /mlc|webllm/i.test(k)).map(k => caches.delete(k)));
+    }catch(_){}
+  }
+  if(typeof indexedDB !== "undefined"){
+    try{
+      if(indexedDB.databases){
+        const dbs = await indexedDB.databases();
+        await Promise.all((dbs || [])
+          .filter(db => db && db.name && /mlc|webllm|tvm/i.test(db.name))
+          .map(db => new Promise(resolve => {
+            const req = indexedDB.deleteDatabase(db.name);
+            req.onsuccess = req.onerror = req.onblocked = () => resolve();
+          })));
+      }else{
+        ["webllm", "mlc-web-llm", "mlc_llm", "mlc"].forEach(name => {
+          try{ indexedDB.deleteDatabase(name); }catch(_){}
+        });
+      }
+    }catch(_){}
+  }
+  updateAiUI();
+}
+
+async function generateQuestObjectsForBook(book){
+  if(!book || !book.id) return;
+  if(!state.books || !state.books[book.id]) return;
+  ensureQuestDefaults(book);
+  if(book.quest.objects && book.quest.objects.length) return;
+  if(_questPending.has(book.id)) return;
+  _questPending.add(book.id);
+  try{
+    const synopsis = (book.synopsis || "").trim();
+    if(!synopsis){
+      const fallback = pickQuestFallbackObjects(book);
+      if(fallback.length){
+        if(!state.books || !state.books[book.id]) return;
+        book.quest.objects = fallback;
+        book.quest.generatedAt = new Date().toISOString();
+        book.quest.method = "heuristic";
+        save();
+        renderAll();
+      }
+      return;
+    }
+
+    const wantsAI = Boolean(state.settings.aiEnabled);
+    const canUseAI = wantsAI && webgpuSupported() && isOnline();
+    if(!canUseAI || !_webLLMEngine){
+      if(canUseAI && !_webLLMEngine && !_webLLMLoading){
+        startWebLLMLoad();
+      }
+      const fallback = pickQuestFallbackObjects(book);
+      if(fallback.length){
+        if(!state.books || !state.books[book.id]) return;
+        book.quest.objects = fallback;
+        book.quest.generatedAt = new Date().toISOString();
+        book.quest.method = "heuristic";
+        save();
+        renderAll();
+      }
+      return;
+    }
+
+    let objects = null;
+    try{
+      const raw = await requestWebGPUQuestObjects(book);
+      objects = sanitizeQuestObjects(raw);
+      if(!objects){
+        const retryRaw = await requestWebGPUQuestObjects(book);
+        objects = sanitizeQuestObjects(retryRaw);
+      }
+    }catch(_){}
+
+    if(objects && objects.length){
+      if(!state.books || !state.books[book.id]) return;
+      book.quest.objects = objects;
+      book.quest.generatedAt = new Date().toISOString();
+      book.quest.method = "webgpu-llm";
+      save();
+      renderAll();
+      return;
+    }
+
+    const heuristic = heuristicQuestObjectsFromSynopsis(synopsis);
+    const fallback = heuristic.length ? heuristic : pickQuestFallbackObjects(book);
+    if(fallback.length){
+      if(!state.books || !state.books[book.id]) return;
+      book.quest.objects = fallback;
+      book.quest.generatedAt = new Date().toISOString();
+      book.quest.method = "heuristic";
+      save();
+      renderAll();
+    }
+  }finally{
+    _questPending.delete(book.id);
+  }
+}
+
+function canAttemptGoogleBooks(book, mode){
+  const title = (book.title || "").trim();
+  const author = (book.author || "").trim();
+  if(!title || !author) return false;
+  if(mode === "save"){
+    const hasSynopsis = Boolean(book.synopsis && book.synopsis.trim());
+    const hasId = Boolean(book.googleBooks && book.googleBooks.id);
+    if(hasSynopsis && hasId) return false;
+  }
+  return true;
+}
+
+async function enrichBookFromGoogle(book, mode){
+  if(!book || !book.id) return;
+  if(!state.books || !state.books[book.id]) return;
+  if(_googleBooksPending.has(book.id)) return;
+  if(!canAttemptGoogleBooks(book, mode)) return;
+  if(typeof navigator !== "undefined" && navigator.onLine === false){
+    await generateQuestObjectsForBook(book);
+    return;
+  }
+  _googleBooksPending.add(book.id);
+  try{
+    const title = (book.title || "").trim();
+    const author = (book.author || "").trim();
+    const q = `intitle:"${title}"+inauthor:"${author}"`;
+    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=5`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("google books fetch failed");
+    const data = await res.json();
+    const match = pickGoogleBooksMatch(data.items || [], title, author);
+    if(!match){
+      await generateQuestObjectsForBook(book);
+      return;
+    }
+    if(!state.books || !state.books[book.id]) return;
+
+    const info = match.volumeInfo || {};
+    const description = stripHtml(info.description || "");
+    let changed = false;
+    if(description && (!book.synopsis || !book.synopsis.trim())){
+      book.synopsis = description;
+      changed = true;
+    }
+    if(!book.googleBooks || typeof book.googleBooks !== "object"){
+      book.googleBooks = { id: "", fetchedAt: "" };
+    }
+    if(!book.googleBooks.id){
+      book.googleBooks.id = match.id || "";
+      changed = true;
+    }
+    if(match.id){
+      book.googleBooks.fetchedAt = new Date().toISOString();
+      changed = true;
+    }
+    if(!book.coverData && info.imageLinks && info.imageLinks.thumbnail){
+      book.coverData = info.imageLinks.thumbnail;
+      changed = true;
+    }
+    if((!book.totalPages || book.totalPages < 1) && Number.isFinite(info.pageCount)){
+      book.totalPages = info.pageCount;
+      changed = true;
+    }
+    if(!book.publisher && info.publisher){
+      book.publisher = info.publisher;
+      changed = true;
+    }
+    if(changed){
+      save();
+      renderAll();
+    }
+    await generateQuestObjectsForBook(book);
+  }catch(_){
+    await generateQuestObjectsForBook(book);
+  }finally{
+    _googleBooksPending.delete(book.id);
   }
 }
 
@@ -422,7 +1067,10 @@ function ensureDefaultBook(){
     createdAt: new Date().toISOString(),
     coverData: "",
     rating: "",
-    finishedAt: null
+    finishedAt: null,
+    synopsis: "",
+    googleBooks: { id: "", fetchedAt: "" },
+    quest: { objects: [], generatedAt: "", method: "", thresholds: QUEST_THRESHOLDS.slice() }
   };
   state.activeBookId = id;
   if(!state.ui.quotesBookId) state.ui.quotesBookId = id;
@@ -684,6 +1332,11 @@ function finishSession(){
   $("timerHint").textContent = t("sessionSaved");
   save();
   renderAll();
+  if(canAttemptGoogleBooks(state.books[id], "add")){
+    enrichBookFromGoogle(state.books[id], "add");
+  }else{
+    generateQuestObjectsForBook(state.books[id]);
+  }
 }
 
 function togglePagesMode(){
@@ -981,6 +1634,60 @@ function renderActiveBook(){
   const aggAll = aggregateDaily(null, days);
   drawBarChart($("chartAllPages"), aggAll.labels, aggAll.pagesArr);
   drawBarChart($("chartAllMins"), aggAll.labels, aggAll.minsArr);
+
+  renderQuestChecklist(b);
+}
+
+function renderQuestChecklist(book){
+  const container = $("questChecklist");
+  if(!container) return;
+  if(!book || !book.quest || !Array.isArray(book.quest.objects) || !book.quest.objects.length){
+    container.innerHTML = "";
+    return;
+  }
+  const unlocked = questUnlockedCount(book);
+  container.innerHTML = book.quest.objects.map((obj, idx) => {
+    const isUnlocked = idx < unlocked;
+    const label = isUnlocked ? obj : "???";
+    const icon = isUnlocked ? "✅" : "⬜";
+    const cls = isUnlocked ? "questItem" : "questItem locked";
+    return `<div class="${cls}">${icon} ${label}</div>`;
+  }).join("");
+}
+
+function renderVault(){
+  const container = $("vault");
+  if(!container) return;
+  const openIds = new Set(Array.from(container.querySelectorAll(".vault-item.open")).map(el => el.dataset.bookId));
+  const books = Object.values(state.books || {}).filter(b => b && b.quest && Array.isArray(b.quest.objects) && b.quest.objects.length);
+  if(!books.length){
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = books.map(b => {
+    const unlocked = questUnlockedCount(b);
+    const openClass = openIds.has(b.id) ? "open" : "";
+    const authorLine = b.author ? `<div class="vault-author">${b.author}</div>` : "";
+    const objectsHtml = b.quest.objects.map((obj, idx) => {
+      const isUnlocked = idx < unlocked;
+      const label = isUnlocked ? obj : "???";
+      const icon = isUnlocked ? "✅" : "⬜";
+      const cls = isUnlocked ? "vault-object" : "vault-object locked";
+      return `<div class="${cls}">${icon} ${label}</div>`;
+    }).join("");
+    return `
+      <div class="vault-item ${openClass}" data-book-id="${b.id}" aria-expanded="${openClass ? "true" : "false"}">
+        <div class="vault-header">
+          <div>
+            <div class="vault-title">${b.title || t("untitled")}</div>
+            ${authorLine}
+          </div>
+          <div class="vault-chip">${t("vaultObjects")}: ${unlocked}/${b.quest.objects.length}</div>
+        </div>
+        <div class="vault-objects">${objectsHtml}</div>
+      </div>
+    `;
+  }).join("");
 }
 
 function renderGlobal(){
@@ -1130,6 +1837,7 @@ function renderAll(){
   renderSessionBookSelect();
   renderDashboard();
   renderActiveBook();
+  renderVault();
   renderGlobal();
   renderAchievements();
   renderQuotes();
@@ -1163,7 +1871,10 @@ function addBook(){
     createdAt: new Date().toISOString(),
     coverData: _pendingNewCoverData || "",
     rating: "",
-    finishedAt: null
+    finishedAt: null,
+    synopsis: "",
+    googleBooks: { id: "", fetchedAt: "" },
+    quest: { objects: [], generatedAt: "", method: "", thresholds: QUEST_THRESHOLDS.slice() }
   };
   state.activeBookId = id;
 
@@ -1182,6 +1893,8 @@ function addBook(){
 
 function saveActiveBook(){
   const b = activeBook();
+  ensureGoogleBooksDefaults(b);
+  ensureQuestDefaults(b);
   b.title = $("editTitle").value.trim() || b.title || t("untitled");
   b.author = $("editAuthor").value.trim() || "";
   b.publisher = $("editPublisher").value.trim() || "";
@@ -1191,9 +1904,15 @@ function saveActiveBook(){
   if(b.totalPages && b.currentPage >= b.totalPages && !b.finishedAt){
     b.finishedAt = new Date().toISOString();
   }
+  const shouldEnrich = canAttemptGoogleBooks(b, "save");
   save();
   renderAll();
   showToast(t("bookSaved"));
+  if(shouldEnrich){
+    enrichBookFromGoogle(b, "save");
+  }else if(!b.quest.objects || !b.quest.objects.length){
+    generateQuestObjectsForBook(b);
+  }
 }
 
 function deleteActiveBook(){
@@ -1651,6 +2370,9 @@ function ensureDriveToken(interactive){
   if(state.drive.token && Date.now() < (state.drive.expiresAt || 0)){
     return Promise.resolve(true);
   }
+  if(backendEnabled()){
+    return ensureDriveTokenViaBackend(interactive);
+  }
   return new Promise(resolve => {
     const client = driveTokenClient();
     if(!client){
@@ -1673,6 +2395,41 @@ function ensureDriveToken(interactive){
     const prompt = interactive ? (state.drive.hasConsent ? "" : "consent") : "none";
     client.requestAccessToken({ prompt });
   });
+}
+
+async function ensureDriveTokenViaBackend(interactive){
+  const backend = getBackendUrl();
+  if(!backend) return false;
+  const sessionId = getDriveSession();
+  if(sessionId){
+    try{
+      const res = await fetch(`${backend}/auth/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionId}`
+        }
+      });
+      if(res.ok){
+        const data = await res.json();
+        if(data && data.access_token){
+          state.drive.token = data.access_token;
+          state.drive.expiresAt = Date.now() + (data.expires_in || 3600) * 1000 - 60000;
+          state.drive.hasConsent = true;
+          setDriveUI(true);
+          save();
+          return true;
+        }
+      }else if(res.status === 401){
+        clearDriveSession();
+        state.drive.hasConsent = false;
+      }
+    }catch(_){}
+  }
+  if(interactive){
+    startBackendAuth();
+  }
+  return false;
 }
 
 async function driveFindFileId(){
@@ -1722,7 +2479,8 @@ async function drivePull(){
     const hadConsent = state.drive.hasConsent;
     Object.assign(state, data);
     state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0, hasConsent:false }, state.drive || {}, { token, expiresAt, fileId });
-    state.settings = Object.assign({ lang:"en-GB" }, state.settings || {});
+    state.settings = Object.assign({ lang:"en-GB", aiEnabled:false }, state.settings || {});
+    state.settings.aiEnabled = Boolean(state.settings.aiEnabled);
     state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
     state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
     normalizeTimerState();
@@ -1735,6 +2493,10 @@ async function drivePull(){
     applyI18n();
     const appLangSelect = $("appLang");
     if(appLangSelect) appLangSelect.value = state.settings.lang || "en-GB";
+    updateAiUI();
+    if(state.settings.aiEnabled){
+      startWebLLMLoad();
+    }
     applyTimerState();
     save();
     renderAll();
@@ -1747,12 +2509,21 @@ async function drivePull(){
 
 function disconnectDrive(){
   const token = state.drive.token;
+  const backend = getBackendUrl();
+  const sessionId = getDriveSession();
   state.drive.token = null;
   state.drive.expiresAt = 0;
   state.drive.hasConsent = false;
   setConsentCookie(false);
   save();
   setDriveUI(false);
+  if(backend && sessionId){
+    fetch(`${backend}/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${sessionId}` }
+    }).catch(()=>{});
+  }
+  clearDriveSession();
   if(_driveAutoId){
     clearInterval(_driveAutoId);
     _driveAutoId = null;
@@ -1846,7 +2617,8 @@ function scheduleSilentSignIn(){
     clearTimeout(_authFallbackId);
     _authFallbackId = null;
   }
-  if(!state.drive.hasConsent){
+  const hasBackendSession = backendEnabled() && Boolean(getDriveSession());
+  if(!state.drive.hasConsent && !hasBackendSession){
     setAuthGate(true, "login");
     return;
   }
@@ -1868,6 +2640,10 @@ function cleanupServiceWorkers(){
 }
 
 async function handleAuthFlow(interactive){
+  if(interactive && backendEnabled()){
+    startBackendAuth();
+    return;
+  }
   if(interactive){
     setAuthGate(true, "checking");
   }
@@ -1894,6 +2670,15 @@ async function handleAuthFlow(interactive){
 }
 
 async function silentSignIn(){
+  if(backendEnabled()){
+    const ok = await ensureDriveToken(false);
+    if(!ok) return false;
+    setDriveUI(true);
+    setAuthGate(false);
+    await drivePull();
+    scheduleDriveAuto();
+    return true;
+  }
   const ready = await waitForGoogleClient();
   if(!ready) return false;
   const ok = await ensureDriveToken(false);
@@ -1924,10 +2709,16 @@ function importJSON(file){
       if(!data || typeof data !== "object") throw new Error("bad");
       Object.assign(state, data);
       state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
+      state.settings = Object.assign({ lang:"en-GB", aiEnabled:false }, state.settings || {});
+      state.settings.aiEnabled = Boolean(state.settings.aiEnabled);
       normalizeTimerState();
       normalizeBooks();
       ensureDefaultBook();
       applyI18n();
+      updateAiUI();
+      if(state.settings.aiEnabled){
+        startWebLLMLoad();
+      }
       applyTimerState();
       save();
       renderAll();
@@ -2152,6 +2943,40 @@ function bind(){
       setLanguage($("appLang").value);
     });
   }
+  const aiToggle = $("aiToggle");
+  if(aiToggle){
+    aiToggle.addEventListener("change", () => {
+      state.settings.aiEnabled = Boolean(aiToggle.checked);
+      save();
+      updateAiUI();
+      if(state.settings.aiEnabled){
+        startWebLLMLoad();
+      }
+    });
+  }
+  const aiClear = $("aiClearModel");
+  if(aiClear){
+    aiClear.addEventListener("click", () => {
+      clearWebLLMCache().then(() => {
+        showToast(t("aiClearToast"));
+      });
+    });
+  }
+  const aiReload = $("aiReload");
+  if(aiReload){
+    aiReload.addEventListener("click", () => {
+      location.reload();
+    });
+  }
+  if(typeof window !== "undefined"){
+    window.addEventListener("online", () => {
+      updateAiUI();
+      if(state.settings.aiEnabled){
+        startWebLLMLoad();
+      }
+    });
+    window.addEventListener("offline", updateAiUI);
+  }
 
   $("addQuote").addEventListener("click", addQuote);
   $("quoteText").addEventListener("input", () => {
@@ -2171,6 +2996,17 @@ function bind(){
       state.ui.quotesBookId = card.dataset.bookId;
       save();
       renderQuotes();
+    });
+  }
+  const vault = $("vault");
+  if(vault){
+    vault.addEventListener("click", (e) => {
+      const header = e.target.closest(".vault-header");
+      if(!header || !vault.contains(header)) return;
+      const item = header.closest(".vault-item");
+      if(!item) return;
+      const isOpen = item.classList.toggle("open");
+      item.setAttribute("aria-expanded", isOpen ? "true" : "false");
     });
   }
   $("previewQuote").addEventListener("click", () => { drawQuoteImage(); });
@@ -2251,6 +3087,7 @@ if(typeof window !== "undefined"){
 }
 
 if(!IS_TEST){
+  captureDriveSessionFromUrl();
   load();
   normalizeTimerState();
   normalizeBooks();
@@ -2258,7 +3095,13 @@ if(!IS_TEST){
   applyI18n();
   const appLangSelect = $("appLang");
   if(appLangSelect) appLangSelect.value = state.settings.lang || "en-GB";
-  setDriveUI(Boolean(state.drive.token));
+  updateAiUI();
+  if(state.settings.aiEnabled){
+    startWebLLMLoad();
+  }
+  syncDriveConsentFromSession();
+  const hasBackendSession = backendEnabled() && Boolean(getDriveSession());
+  setDriveUI(Boolean(state.drive.token) || hasBackendSession);
   setAuthGate(false);
   bind();
   applyTimerState();

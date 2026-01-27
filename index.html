@@ -110,6 +110,11 @@
           </section>
 
           <section class="card col-12">
+            <h2 data-i18n="vaultTitle">Vault</h2>
+            <div id="vault" class="vault"></div>
+          </section>
+
+          <section class="card col-12">
             <h2 data-i18n="overallTitle">Overall (in range)</h2>
             <div class="kpis">
               <div class="kpi">
@@ -329,6 +334,9 @@
             <div class="sessionCoverWrap">
               <div class="sessionCover" id="sessionCover" aria-hidden="true"></div>
             </div>
+            <hr class="sep" />
+            <div class="questTitle" data-i18n="questTitle">Quest objects</div>
+            <div id="questChecklist" class="questChecklist"></div>
           </section>
         </div>
       </section>
@@ -471,6 +479,31 @@
                     <option value="en-GB" data-i18n="langEn">English (UK)</option>
                     <option value="es-MX" data-i18n="langEs">Spanish (Mexico)</option>
                   </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="syncCard">
+              <div class="syncHeader">
+                <div>
+                  <div class="syncTitle" data-i18n="aiTitle">On-device AI</div>
+                </div>
+              </div>
+              <div class="row">
+                <label class="toggle">
+                  <input id="aiToggle" type="checkbox" />
+                  <span data-i18n="aiToggleLabel">Generate quests with on-device AI (downloads ~290 MB)</span>
+                </label>
+              </div>
+              <div class="row">
+                <button class="btn" id="aiClearModel" type="button" data-i18n="aiClearModel">Clear downloaded model</button>
+                <button class="btn" id="aiReload" type="button" data-i18n="aiReload">Reload</button>
+              </div>
+              <div class="small" data-i18n="aiClearHint">Clears on-device model files (may require a refresh).</div>
+              <div class="aiStatus">
+                <div class="small" id="aiDownloadStatus"></div>
+                <div class="aiProgress" aria-hidden="true">
+                  <div class="aiProgressBar" id="aiDownloadBar"></div>
                 </div>
               </div>
             </div>

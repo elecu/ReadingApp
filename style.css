@@ -180,6 +180,36 @@ textarea{min-height:96px;resize:vertical}
   color:var(--muted);
   font-size:12px;
 }
+.toggle{
+  display:inline-flex;
+  gap:8px;
+  align-items:center;
+  color:var(--muted);
+  font-size:12px;
+}
+.toggle input{
+  width:auto;
+}
+.aiStatus{
+  margin-top:6px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.aiProgress{
+  width:100%;
+  height:6px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.08);
+  overflow:hidden;
+  display:none;
+}
+.aiProgress.show{display:block}
+.aiProgressBar{
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg, #6cf5c0, #4ce59f);
+}
 
 .sessionCoverWrap{
   margin-top:14px;
@@ -196,6 +226,67 @@ textarea{min-height:96px;resize:vertical}
   background-position:center;
   box-shadow:0 10px 30px rgba(0,0,0,0.5);
 }
+.questTitle{
+  font-size:12px;
+  color:var(--muted);
+  font-weight:700;
+  margin-top:6px;
+}
+.questChecklist{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-top:8px;
+}
+.questItem{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:12px;
+}
+.questItem.locked{opacity:0.55}
+
+.vault{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.vault-item{
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:rgba(0,0,0,0.18);
+}
+.vault-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 12px;
+  cursor:pointer;
+}
+.vault-title{font-weight:700}
+.vault-author{
+  color:var(--muted);
+  font-size:12px;
+  margin-top:2px;
+}
+.vault-chip{
+  font-size:11px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:4px 8px;
+  background:rgba(255,255,255,0.04);
+  white-space:nowrap;
+}
+.vault-objects{
+  display:none;
+  flex-direction:column;
+  gap:6px;
+  padding:0 12px 12px;
+}
+.vault-item.open .vault-objects{display:flex}
+.vault-object{font-size:12px}
+.vault-object.locked{opacity:0.55}
 
 .badge{
   display:inline-flex;
