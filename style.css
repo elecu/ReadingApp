@@ -261,10 +261,17 @@ textarea{min-height:96px;resize:vertical}
   border-radius:14px;
   background:rgba(0,0,0,0.18);
   cursor:pointer;
+  color:var(--text);
+  width:100%;
+  text-align:left;
 }
 .vault-main-title{
   font-weight:800;
   font-size:14px;
+}
+.vault-main-caret{
+  font-size:12px;
+  color:var(--muted);
 }
 .vault-books{
   display:none;
@@ -306,6 +313,13 @@ textarea{min-height:96px;resize:vertical}
   padding:0 12px 12px;
 }
 .vault-item.open .vault-objects{display:flex}
+.vault-actions{
+  display:none;
+  gap:8px;
+  padding:0 12px 10px;
+  flex-wrap:wrap;
+}
+.vault-item.open .vault-actions{display:flex}
 .vault-object{font-size:12px}
 .vault-object.locked{opacity:0.55}
 

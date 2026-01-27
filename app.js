@@ -9,7 +9,7 @@ const QUEST_THRESHOLDS = [0.1, 0.3, 0.5, 0.7, 0.9];
 const QUEST_MIN_OBJECTS = 5;
 const QUEST_MAX_OBJECTS = 10;
 const WEBLLM_IMPORT_URL = "https://esm.run/@mlc-ai/web-llm";
-const WEBLLM_MODEL_ID = "Qwen2-0.5B-Instruct-q4f16_1-MLC";
+const WEBLLM_MODEL_ID = "Qwen2-0.5B-Instruct-q4f16_1";
 const WEBLLM_MODEL_SIZE_MB = 290;
 const QUEST_FALLBACK_POOL = [
   "bookmark","library card","paperback","hardcover","dust jacket",
@@ -69,11 +69,15 @@ const I18N = {
     questTitle: "Quest objects",
     vaultTitle: "Valt",
     vaultObjects: "Objects",
+    vaultReveal: "Reveal objects",
+    vaultHide: "Hide objects",
+    vaultDelete: "Delete objects",
     aiTitle: "On-device AI (Quest Generation)",
     aiToggleLabel: "Use on-device AI to generate quest objects (downloads ~290 MB)",
     aiClearModel: "Clear on-device AI model",
     aiReload: "Reload the app",
     aiClearHint: "Clears the downloaded on-device AI model files to free storage (may require a refresh).",
+    questRegenerate: "Regenerate quest objects",
     aiClearToast: "Refresh the page to fully release storage.",
     aiStatusFallback: "AI not available → using fallback.",
     aiStatusReady: "On-device AI ready.",
@@ -300,11 +304,13 @@ const state = {
   },
   settings: {
     lang: "en-GB",
-    aiEnabled: true
+    aiEnabled: true,
+    aiEnabledMigrated: false
   },
   ui: {
     quotesBookId: null,
-    quoteAuthorAuto: ""
+    quoteAuthorAuto: "",
+    vaultReveal: {}
   }
 };
 
@@ -321,6 +327,7 @@ let _webLLMEngine = null;
 let _webLLMLoading = false;
 let _webLLMProgress = 0;
 let _webLLMLastStatus = "";
+let _webLLMFailed = false;
 
 function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
 function todayKey(d=new Date()){ return d.toISOString().slice(0,10); }
@@ -456,10 +463,14 @@ function load(){
   state.drive.expiresAt = 0;
   state.drive.hasConsent = Boolean(state.drive.hasConsent) || getConsentCookie();
   if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
-  state.settings = Object.assign({ lang:"en-GB", aiEnabled:true }, state.settings || {});
+  state.settings = Object.assign({ lang:"en-GB", aiEnabled:true, aiEnabledMigrated:false }, state.settings || {});
+  if(!state.settings.aiEnabledMigrated){
+    state.settings.aiEnabled = true;
+    state.settings.aiEnabledMigrated = true;
+  }
   state.settings.aiEnabled = Boolean(state.settings.aiEnabled);
   state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
-  state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
+  state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "", vaultReveal: {} }, state.ui || {});
   if(!state.books) state.books = {};
   syncDriveConsentFromSession();
 }
@@ -729,6 +740,8 @@ function updateAiUI(){
     text = `${t("aiStatusOffline")} ${t("aiStatusFallback")}`;
   }else if(_webLLMEngine){
     text = t("aiStatusReady");
+  }else if(_webLLMFailed){
+    text = t("aiStatusFallback");
   }else if(_webLLMLoading){
     const pct = Math.max(0, Math.min(100, Math.round((_webLLMProgress || 0) * 100)));
     text = `${t("aiStatusDownloading", { pct: String(pct) })} ${t("aiStatusFallback")}`;
@@ -780,6 +793,7 @@ async function startWebLLMLoad(){
   if(!state.settings.aiEnabled || !webgpuSupported() || !isOnline()) return null;
   _webLLMLoading = true;
   _webLLMProgress = 0;
+  _webLLMFailed = false;
   updateAiUI();
   try{
     const webllm = await loadWebLLMLibrary();
@@ -813,6 +827,7 @@ async function startWebLLMLoad(){
     return _webLLMEngine;
   }catch(_){
     _webLLMEngine = null;
+    _webLLMFailed = true;
     return null;
   }finally{
     _webLLMLoading = false;
@@ -852,6 +867,7 @@ async function clearWebLLMCache(){
   _webLLMLoading = false;
   _webLLMProgress = 0;
   _webLLMLastStatus = "";
+  _webLLMFailed = false;
   try{
     const webllm = await loadWebLLMLibrary();
     if(webllm && typeof webllm.deleteModel === "function"){
@@ -1670,8 +1686,10 @@ function renderVault(){
   const mainOpen = container.classList.contains("open");
   const openIds = new Set(Array.from(container.querySelectorAll(".vault-item.open")).map(el => el.dataset.bookId));
   const books = Object.values(state.books || {});
+  if(!state.ui.vaultReveal) state.ui.vaultReveal = {};
   const booksHtml = books.map(b => {
     if(!b) return "";
+    const reveal = Boolean(state.ui.vaultReveal[b.id]);
     const thresholds = questThresholdsForBook(b);
     const progress = questProgress(b);
     let unlocked = 0;
@@ -1684,11 +1702,12 @@ function renderVault(){
     const authorLine = b.author ? `<div class="vault-author">${b.author}</div>` : "";
     const objectsHtml = Array.from({ length: itemCount }, (_, idx) => {
       const isUnlocked = idx < unlocked;
-      const label = isUnlocked ? (objects[idx] || "???") : "???";
+      const label = (isUnlocked || reveal) ? (objects[idx] || "???") : "???";
       const icon = isUnlocked ? "✅" : "⬜";
       const cls = isUnlocked ? "vault-object" : "vault-object locked";
       return `<div class="${cls}">${icon} ${label}</div>`;
     }).join("");
+    const revealLabel = reveal ? t("vaultHide") : t("vaultReveal");
     return `
       <div class="vault-item ${openClass}" data-book-id="${b.id}" aria-expanded="${openClass ? "true" : "false"}">
         <div class="vault-header">
@@ -1698,15 +1717,20 @@ function renderVault(){
           </div>
           <div class="vault-chip">${t("vaultObjects")}: ${Math.min(unlocked, itemCount)}/${itemCount}</div>
         </div>
+        <div class="vault-actions">
+          <button class="btn" type="button" data-vault-action="reveal">${revealLabel}</button>
+          <button class="btn danger" type="button" data-vault-action="delete">${t("vaultDelete")}</button>
+        </div>
         <div class="vault-objects">${objectsHtml}</div>
       </div>
     `;
   }).join("");
 
   container.innerHTML = `
-    <div class="vault-main-header" aria-expanded="${mainOpen ? "true" : "false"}">
+    <button class="vault-main-header" type="button" aria-expanded="${mainOpen ? "true" : "false"}">
       <div class="vault-main-title">${t("vaultTitle")}</div>
-    </div>
+      <div class="vault-main-caret">${mainOpen ? "▾" : "▸"}</div>
+    </button>
     <div class="vault-books">
       ${booksHtml || ""}
     </div>
@@ -1937,6 +1961,19 @@ function saveActiveBook(){
   }else if(!b.quest.objects || !b.quest.objects.length){
     generateQuestObjectsForBook(b);
   }
+}
+
+function regenerateQuestForActiveBook(){
+  const b = activeBook();
+  if(!b) return;
+  ensureQuestDefaults(b);
+  b.quest.objects = [];
+  b.quest.generatedAt = "";
+  b.quest.method = "";
+  if(state.ui.vaultReveal) state.ui.vaultReveal[b.id] = false;
+  save();
+  renderAll();
+  generateQuestObjectsForBook(b);
 }
 
 function deleteActiveBook(){
@@ -2503,10 +2540,14 @@ async function drivePull(){
     const hadConsent = state.drive.hasConsent;
     Object.assign(state, data);
     state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0, hasConsent:false }, state.drive || {}, { token, expiresAt, fileId });
-    state.settings = Object.assign({ lang:"en-GB", aiEnabled:true }, state.settings || {});
+    state.settings = Object.assign({ lang:"en-GB", aiEnabled:true, aiEnabledMigrated:false }, state.settings || {});
+    if(!state.settings.aiEnabledMigrated){
+      state.settings.aiEnabled = true;
+      state.settings.aiEnabledMigrated = true;
+    }
     state.settings.aiEnabled = Boolean(state.settings.aiEnabled);
     state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
-    state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
+    state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "", vaultReveal: {} }, state.ui || {});
     normalizeTimerState();
     if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
     state.drive.hasConsent = hadConsent || state.drive.hasConsent || Boolean(token);
@@ -2732,8 +2773,12 @@ function importJSON(file){
       const data = JSON.parse(reader.result);
       if(!data || typeof data !== "object") throw new Error("bad");
       Object.assign(state, data);
-      state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
-      state.settings = Object.assign({ lang:"en-GB", aiEnabled:true }, state.settings || {});
+      state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "", vaultReveal: {} }, state.ui || {});
+      state.settings = Object.assign({ lang:"en-GB", aiEnabled:true, aiEnabledMigrated:false }, state.settings || {});
+      if(!state.settings.aiEnabledMigrated){
+        state.settings.aiEnabled = true;
+        state.settings.aiEnabledMigrated = true;
+      }
       state.settings.aiEnabled = Boolean(state.settings.aiEnabled);
       normalizeTimerState();
       normalizeBooks();
@@ -2921,6 +2966,8 @@ function bind(){
 
   $("saveBook").addEventListener("click", saveActiveBook);
   $("deleteBook").addEventListener("click", deleteActiveBook);
+  const regenQuest = $("regenQuest");
+  if(regenQuest) regenQuest.addEventListener("click", regenerateQuestForActiveBook);
 
   $("newCover").addEventListener("change", (e)=>handleNewCoverInput(e.target));
   $("editCover").addEventListener("change", (e)=>handleCoverInput(e.target, activeBook()));
@@ -3025,10 +3072,36 @@ function bind(){
   const vault = $("vault");
   if(vault){
     vault.addEventListener("click", (e) => {
+      const actionBtn = e.target.closest("button[data-vault-action]");
+      if(actionBtn && vault.contains(actionBtn)){
+        const item = actionBtn.closest(".vault-item");
+        if(!item) return;
+        const bookId = item.dataset.bookId;
+        const book = state.books[bookId];
+        if(!book) return;
+        const action = actionBtn.dataset.vaultAction;
+        if(action === "reveal"){
+          if(!state.ui.vaultReveal) state.ui.vaultReveal = {};
+          state.ui.vaultReveal[bookId] = !state.ui.vaultReveal[bookId];
+          save();
+          renderAll();
+          return;
+        }
+        if(action === "delete"){
+          ensureQuestDefaults(book);
+          book.quest.objects = [];
+          book.quest.generatedAt = "";
+          book.quest.method = "";
+          save();
+          renderAll();
+          return;
+        }
+      }
       const mainHeader = e.target.closest(".vault-main-header");
       if(mainHeader && vault.contains(mainHeader)){
         const isOpen = vault.classList.toggle("open");
         mainHeader.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        renderVault();
         return;
       }
       const header = e.target.closest(".vault-header");
