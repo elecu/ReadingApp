@@ -605,6 +605,10 @@ function mulberry32(seed){
 
 function questSeedForBook(book){
   const source = (book && book.id) ? book.id : `${book && book.title ? book.title : ""}|${book && book.author ? book.author : ""}`;
+  const seed = book && book.quest && Number.isFinite(book.quest.seed) ? book.quest.seed : 0;
+  if(seed){
+    return hashString(`${source}|${seed}`);
+  }
   return hashString(source);
 }
 
@@ -650,7 +654,7 @@ function questUnlockedCount(book){
 
 function ensureQuestDefaults(book){
   if(!book.quest || typeof book.quest !== "object"){
-    book.quest = { objects: [], generatedAt: "", method: "", thresholds: QUEST_THRESHOLDS.slice() };
+    book.quest = { objects: [], generatedAt: "", method: "", thresholds: QUEST_THRESHOLDS.slice(), seed: 0 };
     return;
   }
   if(!Array.isArray(book.quest.objects)) book.quest.objects = [];
@@ -659,6 +663,14 @@ function ensureQuestDefaults(book){
   if(!Array.isArray(book.quest.thresholds) || !book.quest.thresholds.length){
     book.quest.thresholds = QUEST_THRESHOLDS.slice();
   }
+  if(!Number.isFinite(book.quest.seed)) book.quest.seed = 0;
+}
+
+function bumpQuestSeed(book){
+  if(!book) return;
+  ensureQuestDefaults(book);
+  const current = Number.isFinite(book.quest.seed) ? book.quest.seed : 0;
+  book.quest.seed = current + 1;
 }
 
 function ensureGoogleBooksDefaults(book){
@@ -700,7 +712,7 @@ function questPromptForSynopsis(){
   return base;
 }
 
-function heuristicQuestObjectsFromSynopsis(synopsis){
+function heuristicQuestObjectsFromSynopsis(synopsis, seed){
   const text = stripHtml(synopsis || "").toLowerCase();
   const words = text.match(/[a-zA-Z]+/g) || [];
   const picked = [];
@@ -713,9 +725,16 @@ function heuristicQuestObjectsFromSynopsis(synopsis){
     if(seen.has(word)) continue;
     seen.add(word);
     picked.push(word);
-    if(picked.length >= QUEST_MIN_OBJECTS) break;
   }
-  return picked;
+  if(picked.length <= QUEST_MIN_OBJECTS) return picked;
+  if(!seed) return picked.slice(0, QUEST_MIN_OBJECTS);
+  const rng = mulberry32(hashString(`${seed}|${text}`));
+  const target = Math.min(QUEST_MIN_OBJECTS, picked.length);
+  const pickedIdx = new Set();
+  while(pickedIdx.size < target){
+    pickedIdx.add(Math.floor(rng() * picked.length));
+  }
+  return Array.from(pickedIdx).sort((a, b) => a - b).map(idx => picked[idx]);
 }
 
 function webgpuSupported(){
@@ -1008,8 +1027,20 @@ async function generateQuestObjectsForBook(book, options){
         if(!wantsAI) reason = "ai disabled";
         else if(!webgpuSupported()) reason = "webgpu unavailable";
         else if(!isOnline()) reason = "offline";
-        setQuestStatus(book.id, `${reason} → fallback pool`);
-        const fallback = pickQuestFallbackObjects(book);
+        let fallback = [];
+        let fallbackLabel = "fallback pool";
+        if(synopsis){
+          const heuristic = heuristicQuestObjectsFromSynopsis(synopsis, book.quest && book.quest.seed);
+          if(heuristic.length){
+            fallback = heuristic;
+            fallbackLabel = "heuristic fallback";
+          }else{
+            fallback = pickQuestFallbackObjects(book);
+          }
+        }else{
+          fallback = pickQuestFallbackObjects(book);
+        }
+        setQuestStatus(book.id, `${reason} → ${fallbackLabel}`);
         if(fallback.length){
           if(!state.books || !state.books[book.id]) return;
           book.quest.objects = fallback;
@@ -1027,7 +1058,8 @@ async function generateQuestObjectsForBook(book, options){
       maybeAutoStartWebLLM(force);
       if(allowFallback){
         setQuestStatus(book.id, _webLLMLoading ? "model downloading → queued (fallback shown)" : "model not ready → queued (fallback shown)");
-        const fallback = pickQuestFallbackObjects(book);
+        const heuristic = heuristicQuestObjectsFromSynopsis(synopsis, book.quest && book.quest.seed);
+        const fallback = heuristic.length ? heuristic : pickQuestFallbackObjects(book);
         if(fallback.length){
           if(!state.books || !state.books[book.id]) return;
           book.quest.objects = fallback;
@@ -1069,7 +1101,7 @@ async function generateQuestObjectsForBook(book, options){
     }
     if(allowFallback){
       setQuestStatus(book.id, "AI failed → heuristic fallback");
-      const heuristic = heuristicQuestObjectsFromSynopsis(synopsis);
+      const heuristic = heuristicQuestObjectsFromSynopsis(synopsis, book.quest && book.quest.seed);
       const fallback = heuristic.length ? heuristic : pickQuestFallbackObjects(book);
       if(fallback.length){
         if(!state.books || !state.books[book.id]) return;
@@ -1218,7 +1250,7 @@ function ensureDefaultBook(){
     finishedAt: null,
     synopsis: "",
     googleBooks: { id: "", fetchedAt: "" },
-    quest: { objects: [], generatedAt: "", method: "", thresholds: QUEST_THRESHOLDS.slice() }
+    quest: { objects: [], generatedAt: "", method: "", thresholds: QUEST_THRESHOLDS.slice(), seed: 0 }
   };
   state.activeBookId = id;
   if(!state.ui.quotesBookId) state.ui.quotesBookId = id;
@@ -1836,6 +1868,7 @@ function renderQuestDebug(book){
     `Synopsis: ${synopsis || "—"}`,
     `Quest method: ${method || "—"} (${methodLabel})`,
     `Quest generatedAt: ${quest.generatedAt || "—"}`,
+    `Quest seed: ${Number.isFinite(quest.seed) ? quest.seed : 0}`,
     `Quest objects (${objects.length}): ${objects.length ? objects.join(", ") : "—"}`,
     `Quest thresholds: ${thresholds.join(", ")}`,
     `Quest progress: ${progressPct}%`,
@@ -2098,7 +2131,7 @@ function addBook(){
     finishedAt: null,
     synopsis: "",
     googleBooks: { id: "", fetchedAt: "" },
-    quest: { objects: [], generatedAt: "", method: "", thresholds: QUEST_THRESHOLDS.slice() }
+    quest: { objects: [], generatedAt: "", method: "", thresholds: QUEST_THRESHOLDS.slice(), seed: 0 }
   };
   state.activeBookId = id;
 
@@ -2152,12 +2185,18 @@ function regenerateQuestForActiveBook(){
   const b = activeBook();
   if(!b) return;
   ensureQuestDefaults(b);
+  bumpQuestSeed(b);
   b.quest.objects = [];
   b.quest.generatedAt = "";
   b.quest.method = "";
   if(state.ui.vaultReveal) state.ui.vaultReveal[b.id] = false;
   save();
   renderAll();
+  if(canAttemptGoogleBooks(b, "regen")){
+    setGoogleBooksStatus(b.id, "starting google books lookup");
+    enrichBookFromGoogle(b, "regen");
+    return;
+  }
   generateQuestObjectsForBook(b, { force: true });
 }
 
