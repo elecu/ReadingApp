@@ -324,6 +324,7 @@ const _googleBooksPending = new Set();
 const _questPending = new Set();
 const _webLLMPendingBooks = new Set();
 const _questStatus = {};
+const _googleBooksStatus = {};
 let _webLLM = null;
 let _webLLMEngine = null;
 let _webLLMLoading = false;
@@ -677,6 +678,8 @@ function sanitizeQuestObjects(raw){
     let val = item.trim().toLowerCase().replace(/\s+/g, " ");
     if(val.length < 2 || val.length > 20) continue;
     if(!/^[a-z][a-z\s-]*$/.test(val)) continue;
+    const tokens = val.split(/[\s-]+/g).filter(Boolean);
+    if(tokens.some(tok => QUEST_ABSTRACT_TERMS.has(tok))) continue;
     cleaned.push(val);
   }
   const unique = Array.from(new Set(cleaned));
@@ -727,6 +730,15 @@ function isOnline(){
 function setQuestStatus(bookId, text){
   if(!bookId) return;
   _questStatus[bookId] = { text: String(text || ""), at: new Date().toISOString() };
+  const b = activeBook();
+  if(b && b.id === bookId){
+    renderQuestDebug(b);
+  }
+}
+
+function setGoogleBooksStatus(bookId, text){
+  if(!bookId) return;
+  _googleBooksStatus[bookId] = { text: String(text || ""), at: new Date().toISOString() };
   const b = activeBook();
   if(b && b.id === bookId){
     renderQuestDebug(b);
@@ -1089,13 +1101,26 @@ async function enrichBookFromGoogle(book, mode){
   if(!book || !book.id) return;
   if(!state.books || !state.books[book.id]) return;
   if(_googleBooksPending.has(book.id)) return;
-  if(!canAttemptGoogleBooks(book, mode)) return;
+  if(!canAttemptGoogleBooks(book, mode)){
+    const title = (book.title || "").trim();
+    const author = (book.author || "").trim();
+    if(!title || !author){
+      setGoogleBooksStatus(book.id, "missing title/author → skip");
+    }else if(mode === "save"){
+      setGoogleBooksStatus(book.id, "already has synopsis/id → skip");
+    }else{
+      setGoogleBooksStatus(book.id, "skip");
+    }
+    return;
+  }
   if(typeof navigator !== "undefined" && navigator.onLine === false){
+    setGoogleBooksStatus(book.id, "offline → skip");
     await generateQuestObjectsForBook(book);
     return;
   }
   _googleBooksPending.add(book.id);
   try{
+    setGoogleBooksStatus(book.id, "fetching google books");
     const title = (book.title || "").trim();
     const author = (book.author || "").trim();
     const q = `intitle:"${title}"+inauthor:"${author}"`;
@@ -1105,6 +1130,7 @@ async function enrichBookFromGoogle(book, mode){
     const data = await res.json();
     const match = pickGoogleBooksMatch(data.items || [], title, author);
     if(!match){
+      setGoogleBooksStatus(book.id, "no match");
       await generateQuestObjectsForBook(book);
       return;
     }
@@ -1144,8 +1170,10 @@ async function enrichBookFromGoogle(book, mode){
       save();
       renderAll();
     }
+    setGoogleBooksStatus(book.id, "match found");
     await generateQuestObjectsForBook(book);
   }catch(_){
+    setGoogleBooksStatus(book.id, "error");
     await generateQuestObjectsForBook(book);
   }finally{
     _googleBooksPending.delete(book.id);
@@ -1452,11 +1480,6 @@ function finishSession(){
   $("timerHint").textContent = t("sessionSaved");
   save();
   renderAll();
-  if(canAttemptGoogleBooks(state.books[id], "add")){
-    enrichBookFromGoogle(state.books[id], "add");
-  }else{
-    generateQuestObjectsForBook(state.books[id]);
-  }
 }
 
 function togglePagesMode(){
@@ -1792,6 +1815,10 @@ function renderQuestDebug(book){
   const statusText = statusEntry && statusEntry.text ? statusEntry.text : "idle";
   const statusAt = statusEntry && statusEntry.at ? statusEntry.at : "";
   const statusLine = statusAt ? `${statusText} @ ${statusAt}` : statusText;
+  const gbStatusEntry = _googleBooksStatus[book.id];
+  const gbStatusText = gbStatusEntry && gbStatusEntry.text ? gbStatusEntry.text : "idle";
+  const gbStatusAt = gbStatusEntry && gbStatusEntry.at ? gbStatusEntry.at : "";
+  const gbStatusLine = gbStatusAt ? `${gbStatusText} @ ${gbStatusAt}` : gbStatusText;
   const gb = book.googleBooks || {};
   const synopsis = book.synopsis || "";
   const method = quest.method || "";
@@ -1802,6 +1829,7 @@ function renderQuestDebug(book){
     `Book: ${book.title || t("untitled")}`,
     `Author: ${book.author || "—"}`,
     `Google Books pending: ${_googleBooksPending.has(book.id) ? "yes" : "no"}`,
+    `Google Books status: ${gbStatusLine}`,
     `Google Books ID: ${gb.id || "—"}`,
     `Google Books fetchedAt: ${gb.fetchedAt || "—"}`,
     `Synopsis length: ${synopsis.length}`,
@@ -2085,6 +2113,14 @@ function addBook(){
 
   save();
   renderAll();
+  const book = state.books[id];
+  if(canAttemptGoogleBooks(book, "add")){
+    setGoogleBooksStatus(id, "starting google books lookup");
+    enrichBookFromGoogle(book, "add");
+  }else{
+    setGoogleBooksStatus(id, "missing title/author → skip");
+    generateQuestObjectsForBook(book);
+  }
 }
 
 function saveActiveBook(){
@@ -2105,6 +2141,7 @@ function saveActiveBook(){
   renderAll();
   showToast(t("bookSaved"));
   if(shouldEnrich){
+    setGoogleBooksStatus(b.id, "starting google books lookup");
     enrichBookFromGoogle(b, "save");
   }else if(!b.quest.objects || !b.quest.objects.length){
     generateQuestObjectsForBook(b);
