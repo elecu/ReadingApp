@@ -40,7 +40,7 @@ window.BOOKQUEST_I18N_ES = {
     aiTitle: "IA en el dispositivo (misiones)",
     aiToggleLabel: "Usar IA local para generar objetos de misiones (descarga ~290 MB)",
     aiClearModel: "Borrar modelo de IA local",
-    aiClearHint: "Borra los archivos del modelo de IA local para liberar espacio (puede requerir recargar).",
+    aiClearHint: "Borra archivos del modelo en el dispositivo (puede requerir recargar).",
     aiReload: "Recargar la app",
     questRegenerate: "Regenerar objetos de mision",
     aiClearToast: "Recarga la pagina para liberar almacenamiento.",

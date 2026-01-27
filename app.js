@@ -9,7 +9,7 @@ const QUEST_THRESHOLDS = [0.1, 0.3, 0.5, 0.7, 0.9];
 const QUEST_MIN_OBJECTS = 5;
 const QUEST_MAX_OBJECTS = 10;
 const WEBLLM_IMPORT_URL = "https://esm.run/@mlc-ai/web-llm";
-const WEBLLM_MODEL_ID = "Qwen2-0.5B-Instruct-q4f16_1";
+const WEBLLM_MODEL_ID = "Qwen2-0.5B-Instruct-q4f16_1-MLC";
 const WEBLLM_MODEL_SIZE_MB = 290;
 const QUEST_FALLBACK_POOL = [
   "bookmark","library card","paperback","hardcover","dust jacket",
@@ -76,7 +76,7 @@ const I18N = {
     aiToggleLabel: "Use on-device AI to generate quest objects (downloads ~290 MB)",
     aiClearModel: "Clear on-device AI model",
     aiReload: "Reload the app",
-    aiClearHint: "Clears the downloaded on-device AI model files to free storage (may require a refresh).",
+    aiClearHint: "Clears on-device model files (may require a refresh).",
     questRegenerate: "Regenerate quest objects",
     aiClearToast: "Refresh the page to fully release storage.",
     aiStatusFallback: "AI not available → using fallback.",
@@ -322,6 +322,8 @@ let _authResolved = false;
 let _authFallbackId = null;
 const _googleBooksPending = new Set();
 const _questPending = new Set();
+const _webLLMPendingBooks = new Set();
+const _questStatus = {};
 let _webLLM = null;
 let _webLLMEngine = null;
 let _webLLMLoading = false;
@@ -722,6 +724,47 @@ function isOnline(){
   return navigator.onLine !== false;
 }
 
+function setQuestStatus(bookId, text){
+  if(!bookId) return;
+  _questStatus[bookId] = { text: String(text || ""), at: new Date().toISOString() };
+  const b = activeBook();
+  if(b && b.id === bookId){
+    renderQuestDebug(b);
+  }
+}
+
+function getAiStatusText(){
+  if(!state.settings.aiEnabled){
+    return t("aiStatusDisabled");
+  }
+  if(!webgpuSupported()){
+    return `${t("aiStatusUnavailable")} ${t("aiStatusFallback")}`;
+  }
+  if(!isOnline()){
+    return `${t("aiStatusOffline")} ${t("aiStatusFallback")}`;
+  }
+  if(_webLLMEngine){
+    return t("aiStatusReady");
+  }
+  if(_webLLMFailed){
+    return _webLLMLastStatus ? `${t("aiStatusFallback")} ${_webLLMLastStatus}` : t("aiStatusFallback");
+  }
+  if(_webLLMLoading){
+    const pct = Math.max(0, Math.min(100, Math.round((_webLLMProgress || 0) * 100)));
+    const base = `${t("aiStatusDownloading", { pct: String(pct) })} ${t("aiStatusFallback")}`;
+    return _webLLMLastStatus ? `${base} ${_webLLMLastStatus}` : base;
+  }
+  return `${t("aiStatusIdle")} ${t("aiStatusFallback")}`;
+}
+
+function maybeAutoStartWebLLM(force){
+  if(_webLLMLoading || _webLLMEngine) return;
+  if(!state.settings.aiEnabled) return;
+  if(!webgpuSupported() || !isOnline()) return;
+  if(_webLLMFailed && !force) return;
+  startWebLLMLoad();
+}
+
 function updateAiUI(){
   const toggle = $("aiToggle");
   const status = $("aiDownloadStatus");
@@ -731,27 +774,7 @@ function updateAiUI(){
     toggle.disabled = !webgpuSupported();
   }
   if(!status) return;
-  let text = "";
-  if(!state.settings.aiEnabled){
-    text = t("aiStatusDisabled");
-  }else if(!webgpuSupported()){
-    text = `${t("aiStatusUnavailable")} ${t("aiStatusFallback")}`;
-  }else if(!isOnline()){
-    text = `${t("aiStatusOffline")} ${t("aiStatusFallback")}`;
-  }else if(_webLLMEngine){
-    text = t("aiStatusReady");
-  }else if(_webLLMFailed){
-    text = t("aiStatusFallback");
-  }else if(_webLLMLoading){
-    const pct = Math.max(0, Math.min(100, Math.round((_webLLMProgress || 0) * 100)));
-    text = `${t("aiStatusDownloading", { pct: String(pct) })} ${t("aiStatusFallback")}`;
-    if(_webLLMLastStatus){
-      text = `${text} ${_webLLMLastStatus}`;
-    }
-  }else{
-    text = `${t("aiStatusIdle")} ${t("aiStatusFallback")}`;
-  }
-  status.textContent = text;
+  status.textContent = getAiStatusText();
   if(bar){
     const pct = Math.max(0, Math.min(100, Math.round((_webLLMProgress || 0) * 100)));
     bar.style.width = `${pct}%`;
@@ -759,6 +782,13 @@ function updateAiUI(){
     if(wrap){
       wrap.classList.toggle("show", _webLLMLoading);
     }
+  }
+  if(state.settings.aiEnabled){
+    maybeAutoStartWebLLM(false);
+  }
+  const active = activeBook();
+  if(active){
+    renderQuestDebug(active);
   }
 }
 
@@ -824,14 +854,35 @@ async function startWebLLMLoad(){
     _webLLMEngine = await webllm.CreateMLCEngine(WEBLLM_MODEL_ID, { initProgressCallback, appConfig });
     _webLLMProgress = 1;
     _webLLMLastStatus = "";
+    flushWebLLMPendingBooks();
     return _webLLMEngine;
-  }catch(_){
+  }catch(err){
     _webLLMEngine = null;
+    _webLLMLastStatus = err && err.message ? err.message : "";
     _webLLMFailed = true;
     return null;
   }finally{
     _webLLMLoading = false;
     updateAiUI();
+  }
+}
+
+async function flushWebLLMPendingBooks(){
+  if(!_webLLMEngine || !_webLLMPendingBooks.size) return;
+  const ids = Array.from(_webLLMPendingBooks);
+  _webLLMPendingBooks.clear();
+  for(const id of ids){
+    const book = state.books && state.books[id];
+    if(!book) continue;
+    if(!state.settings.aiEnabled) continue;
+    if(!webgpuSupported() || !isOnline()){
+      _webLLMPendingBooks.add(id);
+      continue;
+    }
+    const synopsis = (book.synopsis || "").trim();
+    if(!synopsis) continue;
+    if(book.quest && book.quest.method === "webgpu-llm") continue;
+    await generateQuestObjectsForBook(book, { force: true, allowFallback: false, queueForAI: false });
   }
 }
 
@@ -868,6 +919,7 @@ async function clearWebLLMCache(){
   _webLLMProgress = 0;
   _webLLMLastStatus = "";
   _webLLMFailed = false;
+  _webLLMPendingBooks.clear();
   try{
     const webllm = await loadWebLLMLibrary();
     if(webllm && typeof webllm.deleteModel === "function"){
@@ -903,51 +955,86 @@ async function clearWebLLMCache(){
   updateAiUI();
 }
 
-async function generateQuestObjectsForBook(book){
+async function generateQuestObjectsForBook(book, options){
+  const opts = options || {};
+  const force = Boolean(opts.force);
+  const allowFallback = opts.allowFallback !== false;
+  const queueForAI = opts.queueForAI !== false;
   if(!book || !book.id) return;
   if(!state.books || !state.books[book.id]) return;
   ensureQuestDefaults(book);
-  if(book.quest.objects && book.quest.objects.length) return;
+  if(!force && book.quest.objects && book.quest.objects.length){
+    setQuestStatus(book.id, "skipped (already has objects)");
+    return;
+  }
   if(_questPending.has(book.id)) return;
   _questPending.add(book.id);
   try{
+    setQuestStatus(book.id, "starting quest generation");
     const synopsis = (book.synopsis || "").trim();
     if(!synopsis){
-      const fallback = pickQuestFallbackObjects(book);
-      if(fallback.length){
-        if(!state.books || !state.books[book.id]) return;
-        book.quest.objects = fallback;
-        book.quest.generatedAt = new Date().toISOString();
-        book.quest.method = "heuristic";
-        save();
-        renderAll();
+      if(allowFallback){
+        setQuestStatus(book.id, "no synopsis → fallback pool");
+        const fallback = pickQuestFallbackObjects(book);
+        if(fallback.length){
+          if(!state.books || !state.books[book.id]) return;
+          book.quest.objects = fallback;
+          book.quest.generatedAt = new Date().toISOString();
+          book.quest.method = "heuristic";
+          save();
+          renderAll();
+        }
       }
       return;
     }
 
     const wantsAI = Boolean(state.settings.aiEnabled);
     const canUseAI = wantsAI && webgpuSupported() && isOnline();
-    if(!canUseAI || !_webLLMEngine){
-      if(canUseAI && !_webLLMEngine && !_webLLMLoading){
-        startWebLLMLoad();
+    if(!canUseAI){
+      if(allowFallback){
+        let reason = "ai unavailable";
+        if(!wantsAI) reason = "ai disabled";
+        else if(!webgpuSupported()) reason = "webgpu unavailable";
+        else if(!isOnline()) reason = "offline";
+        setQuestStatus(book.id, `${reason} → fallback pool`);
+        const fallback = pickQuestFallbackObjects(book);
+        if(fallback.length){
+          if(!state.books || !state.books[book.id]) return;
+          book.quest.objects = fallback;
+          book.quest.generatedAt = new Date().toISOString();
+          book.quest.method = "heuristic";
+          save();
+          renderAll();
+        }
       }
-      const fallback = pickQuestFallbackObjects(book);
-      if(fallback.length){
-        if(!state.books || !state.books[book.id]) return;
-        book.quest.objects = fallback;
-        book.quest.generatedAt = new Date().toISOString();
-        book.quest.method = "heuristic";
-        save();
-        renderAll();
+      return;
+    }
+
+    if(!_webLLMEngine){
+      if(queueForAI) _webLLMPendingBooks.add(book.id);
+      maybeAutoStartWebLLM(force);
+      if(allowFallback){
+        setQuestStatus(book.id, _webLLMLoading ? "model downloading → queued (fallback shown)" : "model not ready → queued (fallback shown)");
+        const fallback = pickQuestFallbackObjects(book);
+        if(fallback.length){
+          if(!state.books || !state.books[book.id]) return;
+          book.quest.objects = fallback;
+          book.quest.generatedAt = new Date().toISOString();
+          book.quest.method = "heuristic";
+          save();
+          renderAll();
+        }
       }
       return;
     }
 
     let objects = null;
     try{
+      setQuestStatus(book.id, "requesting AI objects");
       const raw = await requestWebGPUQuestObjects(book);
       objects = sanitizeQuestObjects(raw);
       if(!objects){
+        setQuestStatus(book.id, "AI retry");
         const retryRaw = await requestWebGPUQuestObjects(book);
         objects = sanitizeQuestObjects(retryRaw);
       }
@@ -958,20 +1045,28 @@ async function generateQuestObjectsForBook(book){
       book.quest.objects = objects;
       book.quest.generatedAt = new Date().toISOString();
       book.quest.method = "webgpu-llm";
+      setQuestStatus(book.id, "AI success");
       save();
       renderAll();
       return;
     }
 
-    const heuristic = heuristicQuestObjectsFromSynopsis(synopsis);
-    const fallback = heuristic.length ? heuristic : pickQuestFallbackObjects(book);
-    if(fallback.length){
-      if(!state.books || !state.books[book.id]) return;
-      book.quest.objects = fallback;
-      book.quest.generatedAt = new Date().toISOString();
-      book.quest.method = "heuristic";
-      save();
-      renderAll();
+    if(!allowFallback){
+      setQuestStatus(book.id, "AI failed → keeping fallback");
+      return;
+    }
+    if(allowFallback){
+      setQuestStatus(book.id, "AI failed → heuristic fallback");
+      const heuristic = heuristicQuestObjectsFromSynopsis(synopsis);
+      const fallback = heuristic.length ? heuristic : pickQuestFallbackObjects(book);
+      if(fallback.length){
+        if(!state.books || !state.books[book.id]) return;
+        book.quest.objects = fallback;
+        book.quest.generatedAt = new Date().toISOString();
+        book.quest.method = "heuristic";
+        save();
+        renderAll();
+      }
     }
   }finally{
     _questPending.delete(book.id);
@@ -1661,6 +1756,7 @@ function renderActiveBook(){
   drawBarChart($("chartAllMins"), aggAll.labels, aggAll.minsArr);
 
   renderQuestChecklist(b);
+  renderQuestDebug(b);
 }
 
 function renderQuestChecklist(book){
@@ -1680,11 +1776,62 @@ function renderQuestChecklist(book){
   }).join("");
 }
 
+function renderQuestDebug(book){
+  const container = $("questDebug");
+  if(!container) return;
+  if(!book){
+    container.textContent = "No active book.";
+    return;
+  }
+  const quest = book.quest || {};
+  const objects = Array.isArray(quest.objects) ? quest.objects : [];
+  const thresholds = questThresholdsForBook(book);
+  const progressPct = Math.round(questProgress(book) * 100);
+  const unlockedCount = questUnlockedCount(book);
+  const statusEntry = _questStatus[book.id];
+  const statusText = statusEntry && statusEntry.text ? statusEntry.text : "idle";
+  const statusAt = statusEntry && statusEntry.at ? statusEntry.at : "";
+  const statusLine = statusAt ? `${statusText} @ ${statusAt}` : statusText;
+  const gb = book.googleBooks || {};
+  const synopsis = book.synopsis || "";
+  const method = quest.method || "";
+  const methodLabel = method === "webgpu-llm" ? "AI" : method === "heuristic" ? "fallback" : "—";
+  const engineState = _webLLMEngine ? "ready" : _webLLMLoading ? "downloading" : _webLLMFailed ? "failed" : "idle";
+  const engineProgress = _webLLMLoading ? `${Math.round((_webLLMProgress || 0) * 100)}%` : "—";
+  const lines = [
+    `Book: ${book.title || t("untitled")}`,
+    `Author: ${book.author || "—"}`,
+    `Google Books pending: ${_googleBooksPending.has(book.id) ? "yes" : "no"}`,
+    `Google Books ID: ${gb.id || "—"}`,
+    `Google Books fetchedAt: ${gb.fetchedAt || "—"}`,
+    `Synopsis length: ${synopsis.length}`,
+    `Synopsis: ${synopsis || "—"}`,
+    `Quest method: ${method || "—"} (${methodLabel})`,
+    `Quest generatedAt: ${quest.generatedAt || "—"}`,
+    `Quest objects (${objects.length}): ${objects.length ? objects.join(", ") : "—"}`,
+    `Quest thresholds: ${thresholds.join(", ")}`,
+    `Quest progress: ${progressPct}%`,
+    `Quest unlocked: ${unlockedCount}/${Math.max(objects.length, thresholds.length)}`,
+    `Quest pending: ${_questPending.has(book.id) ? "yes" : "no"}`,
+    `Quest status: ${statusLine}`,
+    `AI enabled: ${state.settings.aiEnabled ? "yes" : "no"}`,
+    `WebGPU: ${webgpuSupported() ? "yes" : "no"}`,
+    `Online: ${isOnline() ? "yes" : "no"}`,
+    `Model: ${WEBLLM_MODEL_ID}`,
+    `AI engine: ${engineState}`,
+    `AI download: ${engineProgress}`,
+    `AI status: ${getAiStatusText()}`,
+    `AI queue: ${_webLLMPendingBooks.size}`
+  ];
+  container.textContent = lines.join("\n");
+}
+
 function renderVault(){
   const container = $("vault");
   if(!container) return;
-  const mainOpen = container.classList.contains("open");
-  const openIds = new Set(Array.from(container.querySelectorAll(".vault-item.open")).map(el => el.dataset.bookId));
+  const mainDetails = container.querySelector(".vault-main");
+  const mainOpen = mainDetails ? mainDetails.open : false;
+  const openIds = new Set(Array.from(container.querySelectorAll(".vault-item[open]")).map(el => el.dataset.bookId));
   const books = Object.values(state.books || {});
   if(!state.ui.vaultReveal) state.ui.vaultReveal = {};
   const booksHtml = books.map(b => {
@@ -1698,7 +1845,7 @@ function renderVault(){
     }
     const objects = b.quest && Array.isArray(b.quest.objects) ? b.quest.objects : [];
     const itemCount = Math.max(objects.length, thresholds.length || QUEST_THRESHOLDS.length);
-    const openClass = openIds.has(b.id) ? "open" : "";
+    const openAttr = openIds.has(b.id) ? "open" : "";
     const authorLine = b.author ? `<div class="vault-author">${b.author}</div>` : "";
     const objectsHtml = Array.from({ length: itemCount }, (_, idx) => {
       const isUnlocked = idx < unlocked;
@@ -1709,33 +1856,34 @@ function renderVault(){
     }).join("");
     const revealLabel = reveal ? t("vaultHide") : t("vaultReveal");
     return `
-      <div class="vault-item ${openClass}" data-book-id="${b.id}" aria-expanded="${openClass ? "true" : "false"}">
-        <div class="vault-header">
+      <details class="vault-item" data-book-id="${b.id}" ${openAttr}>
+        <summary class="vault-header">
           <div>
             <div class="vault-title">${b.title || t("untitled")}</div>
             ${authorLine}
           </div>
           <div class="vault-chip">${t("vaultObjects")}: ${Math.min(unlocked, itemCount)}/${itemCount}</div>
-        </div>
+        </summary>
         <div class="vault-actions">
           <button class="btn" type="button" data-vault-action="reveal">${revealLabel}</button>
           <button class="btn danger" type="button" data-vault-action="delete">${t("vaultDelete")}</button>
         </div>
         <div class="vault-objects">${objectsHtml}</div>
-      </div>
+      </details>
     `;
   }).join("");
 
   container.innerHTML = `
-    <button class="vault-main-header" type="button" aria-expanded="${mainOpen ? "true" : "false"}">
-      <div class="vault-main-title">${t("vaultTitle")}</div>
-      <div class="vault-main-caret">${mainOpen ? "▾" : "▸"}</div>
-    </button>
-    <div class="vault-books">
-      ${booksHtml || ""}
-    </div>
+    <details class="vault-main" ${mainOpen ? "open" : ""}>
+      <summary class="vault-main-header">
+        <div class="vault-main-title">${t("vaultTitle")}</div>
+        <div class="vault-main-caret" aria-hidden="true">▸</div>
+      </summary>
+      <div class="vault-books">
+        ${booksHtml || ""}
+      </div>
+    </details>
   `;
-  container.classList.toggle("open", mainOpen);
 }
 
 function renderGlobal(){
@@ -1973,7 +2121,7 @@ function regenerateQuestForActiveBook(){
   if(state.ui.vaultReveal) state.ui.vaultReveal[b.id] = false;
   save();
   renderAll();
-  generateQuestObjectsForBook(b);
+  generateQuestObjectsForBook(b, { force: true });
 }
 
 function deleteActiveBook(){
@@ -2560,7 +2708,7 @@ async function drivePull(){
     if(appLangSelect) appLangSelect.value = state.settings.lang || "en-GB";
     updateAiUI();
     if(state.settings.aiEnabled){
-      startWebLLMLoad();
+      maybeAutoStartWebLLM(true);
     }
     applyTimerState();
     save();
@@ -2786,7 +2934,7 @@ function importJSON(file){
       applyI18n();
       updateAiUI();
       if(state.settings.aiEnabled){
-        startWebLLMLoad();
+        maybeAutoStartWebLLM(true);
       }
       applyTimerState();
       save();
@@ -3021,7 +3169,7 @@ function bind(){
       save();
       updateAiUI();
       if(state.settings.aiEnabled){
-        startWebLLMLoad();
+        maybeAutoStartWebLLM(true);
       }
     });
   }
@@ -3043,7 +3191,7 @@ function bind(){
     window.addEventListener("online", () => {
       updateAiUI();
       if(state.settings.aiEnabled){
-        startWebLLMLoad();
+        maybeAutoStartWebLLM(true);
       }
     });
     window.addEventListener("offline", updateAiUI);
@@ -3097,19 +3245,6 @@ function bind(){
           return;
         }
       }
-      const mainHeader = e.target.closest(".vault-main-header");
-      if(mainHeader && vault.contains(mainHeader)){
-        const isOpen = vault.classList.toggle("open");
-        mainHeader.setAttribute("aria-expanded", isOpen ? "true" : "false");
-        renderVault();
-        return;
-      }
-      const header = e.target.closest(".vault-header");
-      if(!header || !vault.contains(header)) return;
-      const item = header.closest(".vault-item");
-      if(!item) return;
-      const isOpen = item.classList.toggle("open");
-      item.setAttribute("aria-expanded", isOpen ? "true" : "false");
     });
   }
   $("previewQuote").addEventListener("click", () => { drawQuoteImage(); });
@@ -3200,7 +3335,7 @@ if(!IS_TEST){
   if(appLangSelect) appLangSelect.value = state.settings.lang || "en-GB";
   updateAiUI();
   if(state.settings.aiEnabled){
-    startWebLLMLoad();
+    maybeAutoStartWebLLM(true);
   }
   syncDriveConsentFromSession();
   const hasBackendSession = backendEnabled() && Boolean(getDriveSession());

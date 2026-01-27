@@ -246,10 +246,37 @@ textarea{min-height:96px;resize:vertical}
 }
 .questItem.locked{opacity:0.55}
 
+.debugPanel{
+  margin-top:12px;
+}
+.debugPanel summary{
+  cursor:pointer;
+  font-weight:600;
+}
+.debugBox{
+  margin-top:8px;
+  padding:10px 12px;
+  border:1px dashed var(--line);
+  border-radius:12px;
+  background:rgba(0,0,0,0.2);
+  font-size:12px;
+  line-height:1.4;
+  color:var(--text);
+  white-space:pre-wrap;
+  max-height:320px;
+  overflow:auto;
+}
+
 .vault{
   display:flex;
   flex-direction:column;
   gap:10px;
+}
+.vault-main{
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:rgba(0,0,0,0.18);
+  overflow:hidden;
 }
 .vault-main-header{
   display:flex;
@@ -257,14 +284,12 @@ textarea{min-height:96px;resize:vertical}
   justify-content:space-between;
   gap:12px;
   padding:10px 12px;
-  border:1px solid var(--line);
-  border-radius:14px;
-  background:rgba(0,0,0,0.18);
   cursor:pointer;
   color:var(--text);
-  width:100%;
   text-align:left;
+  list-style:none;
 }
+.vault-main-header::-webkit-details-marker{display:none}
 .vault-main-title{
   font-weight:800;
   font-size:14px;
@@ -272,13 +297,16 @@ textarea{min-height:96px;resize:vertical}
 .vault-main-caret{
   font-size:12px;
   color:var(--muted);
+  transition:transform 0.2s ease;
 }
 .vault-books{
   display:none;
   flex-direction:column;
   gap:10px;
+  padding:0 12px 12px;
 }
-.vault.open .vault-books{display:flex}
+.vault-main[open] .vault-books{display:flex}
+.vault-main[open] .vault-main-caret{transform:rotate(90deg)}
 .vault-item{
   border:1px solid var(--line);
   border-radius:14px;
@@ -291,7 +319,9 @@ textarea{min-height:96px;resize:vertical}
   gap:12px;
   padding:10px 12px;
   cursor:pointer;
+  list-style:none;
 }
+.vault-header::-webkit-details-marker{display:none}
 .vault-title{font-weight:700}
 .vault-author{
   color:var(--muted);
@@ -312,14 +342,14 @@ textarea{min-height:96px;resize:vertical}
   gap:6px;
   padding:0 12px 12px;
 }
-.vault-item.open .vault-objects{display:flex}
+.vault-item[open] .vault-objects{display:flex}
 .vault-actions{
   display:none;
   gap:8px;
   padding:0 12px 10px;
   flex-wrap:wrap;
 }
-.vault-item.open .vault-actions{display:flex}
+.vault-item[open] .vault-actions{display:flex}
 .vault-object{font-size:12px}
 .vault-object.locked{opacity:0.55}
 
