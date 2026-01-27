@@ -67,13 +67,13 @@ const I18N = {
     downloadStory: "Download Story PNG",
     activeBookTitle: "Active book",
     questTitle: "Quest objects",
-    vaultTitle: "Vault",
+    vaultTitle: "Valt",
     vaultObjects: "Objects",
-    aiTitle: "On-device AI",
-    aiToggleLabel: "Generate quests with on-device AI (downloads ~290 MB)",
-    aiClearModel: "Clear downloaded model",
-    aiClearHint: "Clears on-device model files (may require a refresh).",
-    aiReload: "Reload",
+    aiTitle: "On-device AI (Quest Generation)",
+    aiToggleLabel: "Use on-device AI to generate quest objects (downloads ~290 MB)",
+    aiClearModel: "Clear on-device AI model",
+    aiReload: "Reload the app",
+    aiClearHint: "Clears the downloaded on-device AI model files to free storage (may require a refresh).",
     aiClearToast: "Refresh the page to fully release storage.",
     aiStatusFallback: "AI not available → using fallback.",
     aiStatusReady: "On-device AI ready.",
@@ -300,7 +300,7 @@ const state = {
   },
   settings: {
     lang: "en-GB",
-    aiEnabled: false
+    aiEnabled: true
   },
   ui: {
     quotesBookId: null,
@@ -408,10 +408,18 @@ function setConsentCookie(value){
 function applyI18n(){
   document.documentElement.lang = state.settings.lang || "en-GB";
   document.querySelectorAll("[data-i18n]").forEach(el => {
-    el.textContent = t(el.dataset.i18n);
+    const key = el.dataset.i18n;
+    const value = t(key);
+    if(value !== key){
+      el.textContent = value;
+    }
   });
   document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-    el.placeholder = t(el.dataset.i18nPlaceholder);
+    const key = el.dataset.i18nPlaceholder;
+    const value = t(key);
+    if(value !== key){
+      el.placeholder = value;
+    }
   });
 }
 
@@ -448,7 +456,7 @@ function load(){
   state.drive.expiresAt = 0;
   state.drive.hasConsent = Boolean(state.drive.hasConsent) || getConsentCookie();
   if(!state.drive.autoMins || state.drive.autoMins < 1) state.drive.autoMins = 1;
-  state.settings = Object.assign({ lang:"en-GB", aiEnabled:false }, state.settings || {});
+  state.settings = Object.assign({ lang:"en-GB", aiEnabled:true }, state.settings || {});
   state.settings.aiEnabled = Boolean(state.settings.aiEnabled);
   state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
   state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
@@ -622,7 +630,8 @@ function questUnlockedCount(book){
     if(progress >= tVal) count += 1;
   }
   const maxCount = book && book.quest && Array.isArray(book.quest.objects) ? book.quest.objects.length : 0;
-  return maxCount ? Math.min(count, maxCount) : count;
+  const limit = maxCount || thresholds.length;
+  return limit ? Math.min(count, limit) : count;
 }
 
 function ensureQuestDefaults(book){
@@ -1658,19 +1667,24 @@ function renderQuestChecklist(book){
 function renderVault(){
   const container = $("vault");
   if(!container) return;
+  const mainOpen = container.classList.contains("open");
   const openIds = new Set(Array.from(container.querySelectorAll(".vault-item.open")).map(el => el.dataset.bookId));
-  const books = Object.values(state.books || {}).filter(b => b && b.quest && Array.isArray(b.quest.objects) && b.quest.objects.length);
-  if(!books.length){
-    container.innerHTML = "";
-    return;
-  }
-  container.innerHTML = books.map(b => {
-    const unlocked = questUnlockedCount(b);
+  const books = Object.values(state.books || {});
+  const booksHtml = books.map(b => {
+    if(!b) return "";
+    const thresholds = questThresholdsForBook(b);
+    const progress = questProgress(b);
+    let unlocked = 0;
+    for(const tVal of thresholds){
+      if(progress >= tVal) unlocked += 1;
+    }
+    const objects = b.quest && Array.isArray(b.quest.objects) ? b.quest.objects : [];
+    const itemCount = Math.max(objects.length, thresholds.length || QUEST_THRESHOLDS.length);
     const openClass = openIds.has(b.id) ? "open" : "";
     const authorLine = b.author ? `<div class="vault-author">${b.author}</div>` : "";
-    const objectsHtml = b.quest.objects.map((obj, idx) => {
+    const objectsHtml = Array.from({ length: itemCount }, (_, idx) => {
       const isUnlocked = idx < unlocked;
-      const label = isUnlocked ? obj : "???";
+      const label = isUnlocked ? (objects[idx] || "???") : "???";
       const icon = isUnlocked ? "✅" : "⬜";
       const cls = isUnlocked ? "vault-object" : "vault-object locked";
       return `<div class="${cls}">${icon} ${label}</div>`;
@@ -1682,12 +1696,22 @@ function renderVault(){
             <div class="vault-title">${b.title || t("untitled")}</div>
             ${authorLine}
           </div>
-          <div class="vault-chip">${t("vaultObjects")}: ${unlocked}/${b.quest.objects.length}</div>
+          <div class="vault-chip">${t("vaultObjects")}: ${Math.min(unlocked, itemCount)}/${itemCount}</div>
         </div>
         <div class="vault-objects">${objectsHtml}</div>
       </div>
     `;
   }).join("");
+
+  container.innerHTML = `
+    <div class="vault-main-header" aria-expanded="${mainOpen ? "true" : "false"}">
+      <div class="vault-main-title">${t("vaultTitle")}</div>
+    </div>
+    <div class="vault-books">
+      ${booksHtml || ""}
+    </div>
+  `;
+  container.classList.toggle("open", mainOpen);
 }
 
 function renderGlobal(){
@@ -2479,7 +2503,7 @@ async function drivePull(){
     const hadConsent = state.drive.hasConsent;
     Object.assign(state, data);
     state.drive = Object.assign({ token:null, fileId:null, lastSyncISO:null, lastPullISO:null, autoMins:1, syncLog:[], expiresAt:0, hasConsent:false }, state.drive || {}, { token, expiresAt, fileId });
-    state.settings = Object.assign({ lang:"en-GB", aiEnabled:false }, state.settings || {});
+    state.settings = Object.assign({ lang:"en-GB", aiEnabled:true }, state.settings || {});
     state.settings.aiEnabled = Boolean(state.settings.aiEnabled);
     state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
     state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
@@ -2709,7 +2733,7 @@ function importJSON(file){
       if(!data || typeof data !== "object") throw new Error("bad");
       Object.assign(state, data);
       state.ui = Object.assign({ quotesBookId: null, quoteAuthorAuto: "" }, state.ui || {});
-      state.settings = Object.assign({ lang:"en-GB", aiEnabled:false }, state.settings || {});
+      state.settings = Object.assign({ lang:"en-GB", aiEnabled:true }, state.settings || {});
       state.settings.aiEnabled = Boolean(state.settings.aiEnabled);
       normalizeTimerState();
       normalizeBooks();
@@ -3001,6 +3025,12 @@ function bind(){
   const vault = $("vault");
   if(vault){
     vault.addEventListener("click", (e) => {
+      const mainHeader = e.target.closest(".vault-main-header");
+      if(mainHeader && vault.contains(mainHeader)){
+        const isOpen = vault.classList.toggle("open");
+        mainHeader.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        return;
+      }
       const header = e.target.closest(".vault-header");
       if(!header || !vault.contains(header)) return;
       const item = header.closest(".vault-item");

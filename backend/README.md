@@ -38,3 +38,8 @@ window.BOOKQUEST_CONFIG = {
 
 After deploy, click "Connect Google Drive" once. The app will store a session ID
 and refresh access tokens automatically on reload.
+aiTitle
+ aiToggleLabel
+aiClearModel
+aiReload
+aiClearHint

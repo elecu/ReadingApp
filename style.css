@@ -251,6 +251,27 @@ textarea{min-height:96px;resize:vertical}
   flex-direction:column;
   gap:10px;
 }
+.vault-main-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:rgba(0,0,0,0.18);
+  cursor:pointer;
+}
+.vault-main-title{
+  font-weight:800;
+  font-size:14px;
+}
+.vault-books{
+  display:none;
+  flex-direction:column;
+  gap:10px;
+}
+.vault.open .vault-books{display:flex}
 .vault-item{
   border:1px solid var(--line);
   border-radius:14px;
