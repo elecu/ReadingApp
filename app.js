@@ -11,6 +11,9 @@ const QUEST_MAX_OBJECTS = 10;
 const WEBLLM_IMPORT_URL = "https://esm.run/@mlc-ai/web-llm";
 const WEBLLM_MODEL_ID = "Qwen2-0.5B-Instruct-q4f16_1-MLC";
 const WEBLLM_MODEL_SIZE_MB = 290;
+const TRANSFORMERS_IMPORT_URL = "https://cdn.jsdelivr.net/npm/@xenova/transformers@2/dist/transformers.min.js";
+const TRANSFORMERS_MODEL_ID = "Xenova/flan-t5-small";
+const TRANSFORMERS_MODEL_SIZE_MB = 80;
 const QUEST_FALLBACK_POOL = [
   "bookmark","library card","paperback","hardcover","dust jacket",
   "page","chapter","footnote","index","glossary",
@@ -73,17 +76,20 @@ const I18N = {
     vaultHide: "Hide objects",
     vaultDelete: "Delete objects",
     aiTitle: "On-device AI (Quest Generation)",
-    aiToggleLabel: "Use on-device AI to generate quest objects (downloads ~290 MB)",
+    aiToggleLabel: "Use on-device AI to generate quest objects",
     aiClearModel: "Clear on-device AI model",
     aiReload: "Reload the app",
     aiClearHint: "Clears on-device model files (may require a refresh).",
     questRegenerate: "Regenerate quest objects",
     aiClearToast: "Refresh the page to fully release storage.",
     aiStatusFallback: "AI not available → using fallback.",
-    aiStatusReady: "On-device AI ready.",
+    aiStatusReady: "On-device AI ready (WebGPU).",
+    aiStatusWindowAi: "Chrome AI ready (no download needed).",
+    aiStatusTransformers: "Lite AI ready.",
+    aiStatusTransformersDownloading: "Downloading lite AI model... {pct}%",
     aiStatusUnavailable: "WebGPU not available.",
     aiStatusDisabled: "On-device AI is off.",
-    aiStatusDownloading: "Downloading model... {pct}%",
+    aiStatusDownloading: "Downloading AI model... {pct}%",
     aiStatusOffline: "Offline. Using fallback quests.",
     aiStatusIdle: "Ready to download when needed.",
     markFinished: "Mark finished",
@@ -331,6 +337,14 @@ let _webLLMLoading = false;
 let _webLLMProgress = 0;
 let _webLLMLastStatus = "";
 let _webLLMFailed = false;
+let _windowAiSession = null;
+let _windowAiFailed = false;
+let _transformersLib = null;
+let _transformersEngine = null;
+let _transformersLoading = false;
+let _transformersProgress = 0;
+let _transformersFailed = false;
+const _transformersPendingBooks = new Set();
 
 function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
 function todayKey(d=new Date()){ return d.toISOString().slice(0,10); }
@@ -612,7 +626,23 @@ function questSeedForBook(book){
   return hashString(source);
 }
 
-function pickQuestFallbackObjects(book){
+function questObjectCountForBook(book){
+  const pages = book && Number.isFinite(book.totalPages) && book.totalPages > 0
+    ? book.totalPages : 0;
+  if(pages === 0) return 3;
+  if(pages < 200) return 2;
+  if(pages < 300) return 3;
+  if(pages < 500) return 4;
+  if(pages < 700) return 5;
+  return 6;
+}
+
+function computeQuestThresholds(count){
+  const n = Math.max(1, count);
+  return Array.from({ length: n }, (_, i) => parseFloat(((i + 1) / n).toFixed(4)));
+}
+
+function pickQuestFallbackObjects(book, count){
   const pool = QUEST_FALLBACK_POOL.slice();
   const rng = mulberry32(questSeedForBook(book));
   for(let i=pool.length-1;i>0;i--){
@@ -621,7 +651,7 @@ function pickQuestFallbackObjects(book){
     pool[i] = pool[j];
     pool[j] = tmp;
   }
-  return pool.slice(0, 5);
+  return pool.slice(0, count || 5);
 }
 
 function questThresholdsForBook(book){
@@ -661,7 +691,10 @@ function ensureQuestDefaults(book){
   if(typeof book.quest.generatedAt !== "string") book.quest.generatedAt = "";
   if(typeof book.quest.method !== "string") book.quest.method = "";
   if(!Array.isArray(book.quest.thresholds) || !book.quest.thresholds.length){
-    book.quest.thresholds = QUEST_THRESHOLDS.slice();
+    const existingCount = Array.isArray(book.quest.objects) ? book.quest.objects.length : 0;
+    book.quest.thresholds = existingCount > 0
+      ? computeQuestThresholds(existingCount)
+      : QUEST_THRESHOLDS.slice();
   }
   if(!Number.isFinite(book.quest.seed)) book.quest.seed = 0;
 }
@@ -682,39 +715,86 @@ function ensureGoogleBooksDefaults(book){
   if(typeof book.googleBooks.fetchedAt !== "string") book.googleBooks.fetchedAt = "";
 }
 
-function sanitizeQuestObjects(raw){
+function sanitizeQuestObjects(raw, count){
   if(!Array.isArray(raw) || !raw.length) return null;
+  const target = (count && count > 0) ? count : QUEST_MIN_OBJECTS;
+  const min = Math.max(1, target - 1);
+  const max = target + 1;
   const cleaned = [];
   for(const item of raw){
     if(typeof item !== "string") continue;
     let val = item.trim().toLowerCase().replace(/\s+/g, " ");
-    if(val.length < 2 || val.length > 20) continue;
-    if(!/^[a-z][a-z\s-]*$/.test(val)) continue;
+    if(val.length < 2 || val.length > 30) continue;
+    if(!/^[\p{L}][\p{L}\s-]*$/u.test(val)) continue;
     const tokens = val.split(/[\s-]+/g).filter(Boolean);
     if(tokens.some(tok => QUEST_ABSTRACT_TERMS.has(tok))) continue;
     cleaned.push(val);
   }
   const unique = Array.from(new Set(cleaned));
-  if(unique.length < QUEST_MIN_OBJECTS) return null;
-  if(unique.length > QUEST_MAX_OBJECTS) return unique.slice(0, QUEST_MAX_OBJECTS);
+  if(unique.length < min) return null;
+  if(unique.length > max) return unique.slice(0, target);
   return unique;
 }
 
-function questPromptForSynopsis(){
-  const base = [
-    "You are given a book synopsis.",
-    `Extract up to ${QUEST_MAX_OBJECTS} concrete physical objects that are clearly associated with the story.`,
-    "Avoid spoilers and do not reveal plot twists or endings.",
-    "Avoid abstract concepts (no emotions, no ideas).",
-    "Order the objects roughly by story progression.",
-    `Return ONLY a JSON array of ${QUEST_MIN_OBJECTS}-${QUEST_MAX_OBJECTS} short object names in English, lowercase.`
-  ].join(" ");
-  return base;
+function langCodeToName(lang){
+  const map = {
+    "en":"English","en-GB":"English","en-US":"English","en-AU":"English","en-CA":"English",
+    "es":"Spanish","es-MX":"Spanish","es-ES":"Spanish","es-AR":"Spanish","es-CO":"Spanish","es-CL":"Spanish","es-PE":"Spanish","es-VE":"Spanish",
+    "zh":"Chinese","zh-CN":"Chinese","zh-TW":"Chinese","zh-HK":"Chinese",
+    "hi":"Hindi","hi-IN":"Hindi",
+    "ar":"Arabic","ar-SA":"Arabic","ar-EG":"Arabic","ar-MA":"Arabic",
+    "fr":"French","fr-FR":"French","fr-CA":"French","fr-BE":"French",
+    "pt":"Portuguese","pt-BR":"Portuguese","pt-PT":"Portuguese",
+    "ru":"Russian","ru-RU":"Russian",
+    "de":"German","de-DE":"German","de-AT":"German","de-CH":"German",
+    "ja":"Japanese","ja-JP":"Japanese",
+    "ko":"Korean","ko-KR":"Korean",
+    "it":"Italian","it-IT":"Italian",
+    "tr":"Turkish","tr-TR":"Turkish",
+    "nl":"Dutch","nl-NL":"Dutch","nl-BE":"Dutch",
+    "pl":"Polish","pl-PL":"Polish",
+    "sv":"Swedish","sv-SE":"Swedish",
+    "no":"Norwegian","nb":"Norwegian","nn":"Norwegian",
+    "da":"Danish","da-DK":"Danish",
+    "fi":"Finnish","fi-FI":"Finnish",
+    "cs":"Czech","cs-CZ":"Czech",
+    "ro":"Romanian","ro-RO":"Romanian",
+    "hu":"Hungarian","hu-HU":"Hungarian",
+    "el":"Greek","el-GR":"Greek",
+    "he":"Hebrew","he-IL":"Hebrew",
+    "id":"Indonesian","id-ID":"Indonesian",
+    "ms":"Malay","ms-MY":"Malay",
+    "th":"Thai","th-TH":"Thai",
+    "vi":"Vietnamese","vi-VN":"Vietnamese",
+    "uk":"Ukrainian","uk-UA":"Ukrainian",
+    "bn":"Bengali","bn-BD":"Bengali","bn-IN":"Bengali",
+    "sw":"Swahili","sw-KE":"Swahili",
+    "ca":"Catalan","ca-ES":"Catalan",
+    "eu":"Basque","gl":"Galician","hr":"Croatian","sk":"Slovak",
+    "bg":"Bulgarian","sr":"Serbian",
+    "fa":"Persian","fa-IR":"Persian",
+    "ur":"Urdu","ur-PK":"Urdu"
+  };
+  if(!lang) return "English";
+  return map[lang] || map[lang.split("-")[0]] || "English";
 }
 
-function heuristicQuestObjectsFromSynopsis(synopsis, seed){
+function questPromptForSynopsis(count, lang){
+  const n = count || 4;
+  const langName = langCodeToName(lang);
+  return [
+    "You are given a book synopsis.",
+    `List exactly ${n} concrete physical objects from the story.`,
+    "Avoid spoilers. Only tangible items, no abstract concepts.",
+    "Order by story progression.",
+    `Reply ONLY with a JSON array of exactly ${n} short names in ${langName}, lowercase.`
+  ].join(" ");
+}
+
+function heuristicQuestObjectsFromSynopsis(synopsis, seed, count){
+  const target = (count && count > 0) ? count : QUEST_MIN_OBJECTS;
   const text = stripHtml(synopsis || "").toLowerCase();
-  const words = text.match(/[a-zA-Z]+/g) || [];
+  const words = text.match(/[\p{L}]+/gu) || [];
   const picked = [];
   const seen = new Set();
   for(const wordRaw of words){
@@ -726,12 +806,12 @@ function heuristicQuestObjectsFromSynopsis(synopsis, seed){
     seen.add(word);
     picked.push(word);
   }
-  if(picked.length <= QUEST_MIN_OBJECTS) return picked;
-  if(!seed) return picked.slice(0, QUEST_MIN_OBJECTS);
+  if(picked.length <= target) return picked;
+  if(!seed) return picked.slice(0, target);
   const rng = mulberry32(hashString(`${seed}|${text}`));
-  const target = Math.min(QUEST_MIN_OBJECTS, picked.length);
+  const pickedCount = Math.min(target, picked.length);
   const pickedIdx = new Set();
-  while(pickedIdx.size < target){
+  while(pickedIdx.size < pickedCount){
     pickedIdx.add(Math.floor(rng() * picked.length));
   }
   return Array.from(pickedIdx).sort((a, b) => a - b).map(idx => picked[idx]);
@@ -739,6 +819,10 @@ function heuristicQuestObjectsFromSynopsis(synopsis, seed){
 
 function webgpuSupported(){
   return typeof navigator !== "undefined" && Boolean(navigator.gpu);
+}
+
+function windowAiSupported(){
+  return typeof window !== "undefined" && window.ai && typeof window.ai.languageModel !== "undefined";
 }
 
 function isOnline(){
@@ -768,22 +852,32 @@ function getAiStatusText(){
   if(!state.settings.aiEnabled){
     return t("aiStatusDisabled");
   }
-  if(!webgpuSupported()){
-    return `${t("aiStatusUnavailable")} ${t("aiStatusFallback")}`;
-  }
   if(!isOnline()){
     return `${t("aiStatusOffline")} ${t("aiStatusFallback")}`;
   }
-  if(_webLLMEngine){
-    return t("aiStatusReady");
+  // Chrome Built-in AI
+  if(windowAiSupported()){
+    return t("aiStatusWindowAi");
   }
-  if(_webLLMFailed){
-    return _webLLMLastStatus ? `${t("aiStatusFallback")} ${_webLLMLastStatus}` : t("aiStatusFallback");
+  // WebLLM (WebGPU desktop)
+  if(webgpuSupported()){
+    if(_webLLMEngine) return t("aiStatusReady");
+    if(_webLLMFailed){
+      return _webLLMLastStatus ? `${t("aiStatusFallback")} ${_webLLMLastStatus}` : t("aiStatusFallback");
+    }
+    if(_webLLMLoading){
+      const pct = Math.max(0, Math.min(100, Math.round((_webLLMProgress || 0) * 100)));
+      const base = `${t("aiStatusDownloading", { pct: String(pct) })} ${t("aiStatusFallback")}`;
+      return _webLLMLastStatus ? `${base} ${_webLLMLastStatus}` : base;
+    }
+    return `${t("aiStatusIdle")} ${t("aiStatusFallback")}`;
   }
-  if(_webLLMLoading){
-    const pct = Math.max(0, Math.min(100, Math.round((_webLLMProgress || 0) * 100)));
-    const base = `${t("aiStatusDownloading", { pct: String(pct) })} ${t("aiStatusFallback")}`;
-    return _webLLMLastStatus ? `${base} ${_webLLMLastStatus}` : base;
+  // Transformers.js (mobile/Safari)
+  if(_transformersEngine) return t("aiStatusTransformers");
+  if(_transformersFailed) return `${t("aiStatusFallback")}`;
+  if(_transformersLoading){
+    const pct = Math.max(0, Math.min(100, Math.round((_transformersProgress || 0) * 100)));
+    return t("aiStatusTransformersDownloading", { pct: String(pct) });
   }
   return `${t("aiStatusIdle")} ${t("aiStatusFallback")}`;
 }
@@ -796,26 +890,40 @@ function maybeAutoStartWebLLM(force){
   startWebLLMLoad();
 }
 
+function maybeAutoStartAI(force){
+  if(windowAiSupported()) return; // window.ai needs no pre-loading
+  if(webgpuSupported()){
+    maybeAutoStartWebLLM(force);
+  } else {
+    // Mobile/Safari: pre-load Transformers.js lite model
+    if(!_transformersLoading && !_transformersEngine && !_transformersFailed && state.settings.aiEnabled && isOnline()){
+      startTransformersLoad();
+    }
+  }
+}
+
 function updateAiUI(){
   const toggle = $("aiToggle");
   const status = $("aiDownloadStatus");
   const bar = $("aiDownloadBar");
   if(toggle){
     toggle.checked = Boolean(state.settings.aiEnabled);
-    toggle.disabled = !webgpuSupported();
+    toggle.disabled = false; // at least one engine works on all browsers
   }
   if(!status) return;
   status.textContent = getAiStatusText();
   if(bar){
-    const pct = Math.max(0, Math.min(100, Math.round((_webLLMProgress || 0) * 100)));
+    const isLoading = _webLLMLoading || _transformersLoading;
+    const progress = _webLLMLoading ? _webLLMProgress : _transformersProgress;
+    const pct = Math.max(0, Math.min(100, Math.round((progress || 0) * 100)));
     bar.style.width = `${pct}%`;
     const wrap = bar.parentElement;
     if(wrap){
-      wrap.classList.toggle("show", _webLLMLoading);
+      wrap.classList.toggle("show", isLoading);
     }
   }
   if(state.settings.aiEnabled){
-    maybeAutoStartWebLLM(false);
+    maybeAutoStartAI(false);
   }
   const active = activeBook();
   if(active){
@@ -917,11 +1025,72 @@ async function flushWebLLMPendingBooks(){
   }
 }
 
-async function requestWebGPUQuestObjects(book){
+async function loadTransformersLibrary(){
+  if(_transformersLib) return _transformersLib;
+  _transformersLib = await import(TRANSFORMERS_IMPORT_URL);
+  return _transformersLib;
+}
+
+async function startTransformersLoad(){
+  if(_transformersLoading || _transformersEngine || _transformersFailed) return;
+  if(!state.settings.aiEnabled || !isOnline()) return;
+  _transformersLoading = true;
+  _transformersProgress = 0;
+  updateAiUI();
+  try{
+    const { pipeline, env } = await loadTransformersLibrary();
+    env.allowLocalModels = false;
+    _transformersEngine = await pipeline("text2text-generation", TRANSFORMERS_MODEL_ID, {
+      progress_callback: (report) => {
+        if(report && typeof report.progress === "number"){
+          _transformersProgress = report.progress / 100;
+          updateAiUI();
+        }
+      }
+    });
+    _transformersProgress = 1;
+    flushTransformersPendingBooks();
+  }catch(err){
+    _transformersFailed = true;
+    _transformersEngine = null;
+  }finally{
+    _transformersLoading = false;
+    updateAiUI();
+  }
+}
+
+async function flushTransformersPendingBooks(){
+  if(!_transformersEngine || !_transformersPendingBooks.size) return;
+  const ids = Array.from(_transformersPendingBooks);
+  _transformersPendingBooks.clear();
+  for(const id of ids){
+    const book = state.books && state.books[id];
+    if(!book) continue;
+    if(!state.settings.aiEnabled) continue;
+    const synopsis = (book.synopsis || "").trim();
+    if(!synopsis) continue;
+    if(book.quest && (book.quest.method === "webgpu-llm" || book.quest.method === "window-ai" || book.quest.method === "transformers-js")) continue;
+    await generateQuestObjectsForBook(book, { force: true, allowFallback: false, queueForAI: false });
+  }
+}
+
+async function requestTransformersQuestObjects(book, count, lang){
+  if(!_transformersEngine) return null;
+  const prompt = `${questPromptForSynopsis(count, lang)}\nTitle: ${book.title || ""}\nSynopsis: ${stripHtml(book.synopsis || "")}`;
+  try{
+    const output = await _transformersEngine(prompt, { max_new_tokens: 120, temperature: 0.2 });
+    const text = output && output[0] && output[0].generated_text ? output[0].generated_text : "";
+    return extractJsonArray(text);
+  }catch(_){
+    return null;
+  }
+}
+
+async function requestWebGPUQuestObjects(book, count, lang){
   if(!_webLLMEngine) return null;
   const synopsis = book.synopsis || "";
   const messages = [
-    { role: "system", content: questPromptForSynopsis() },
+    { role: "system", content: questPromptForSynopsis(count, lang) },
     { role: "user", content: `Title: ${book.title || ""}\nAuthor: ${book.author || ""}\nSynopsis: ${stripHtml(synopsis)}` }
   ];
   try{
@@ -935,6 +1104,24 @@ async function requestWebGPUQuestObjects(book){
       : "";
     return extractJsonArray(text);
   }catch(_){
+    return null;
+  }
+}
+
+async function requestWindowAiQuestObjects(book, count, lang){
+  try{
+    if(!windowAiSupported()) return null;
+    const capabilities = await window.ai.languageModel.capabilities();
+    if(!capabilities || capabilities.available === "no") return null;
+    const session = await window.ai.languageModel.create({
+      systemPrompt: questPromptForSynopsis(count, lang)
+    });
+    const prompt = `Title: ${book.title || ""}\nAuthor: ${book.author || ""}\nSynopsis: ${stripHtml(book.synopsis || "")}`;
+    const text = await session.prompt(prompt);
+    session.destroy();
+    return extractJsonArray(text);
+  }catch(_){
+    _windowAiFailed = true;
     return null;
   }
 }
@@ -1000,117 +1187,134 @@ async function generateQuestObjectsForBook(book, options){
   }
   if(_questPending.has(book.id)) return;
   _questPending.add(book.id);
+
+  const count = questObjectCountForBook(book);
+  const lang = book.language || (state.settings && state.settings.lang) || "en-GB";
+  const computedThresholds = computeQuestThresholds(count);
+
+  function commitObjects(objects, method){
+    if(!state.books || !state.books[book.id]) return false;
+    book.quest.objects = objects;
+    book.quest.thresholds = computedThresholds;
+    book.quest.generatedAt = new Date().toISOString();
+    book.quest.method = method;
+    save();
+    renderAll();
+    return true;
+  }
+
   try{
     setQuestStatus(book.id, "starting quest generation");
     const synopsis = (book.synopsis || "").trim();
+
     if(!synopsis){
       if(allowFallback){
         setQuestStatus(book.id, "no synopsis → fallback pool");
-        const fallback = pickQuestFallbackObjects(book);
-        if(fallback.length){
-          if(!state.books || !state.books[book.id]) return;
-          book.quest.objects = fallback;
-          book.quest.generatedAt = new Date().toISOString();
-          book.quest.method = "heuristic";
-          save();
-          renderAll();
-        }
+        const fallback = pickQuestFallbackObjects(book, count);
+        if(fallback.length) commitObjects(fallback, "heuristic");
       }
       return;
     }
 
     const wantsAI = Boolean(state.settings.aiEnabled);
-    const canUseAI = wantsAI && webgpuSupported() && isOnline();
-    if(!canUseAI){
-      if(allowFallback){
-        let reason = "ai unavailable";
-        if(!wantsAI) reason = "ai disabled";
-        else if(!webgpuSupported()) reason = "webgpu unavailable";
-        else if(!isOnline()) reason = "offline";
-        let fallback = [];
-        let fallbackLabel = "fallback pool";
-        if(synopsis){
-          const heuristic = heuristicQuestObjectsFromSynopsis(synopsis, book.quest && book.quest.seed);
-          if(heuristic.length){
-            fallback = heuristic;
-            fallbackLabel = "heuristic fallback";
-          }else{
-            fallback = pickQuestFallbackObjects(book);
-          }
-        }else{
-          fallback = pickQuestFallbackObjects(book);
+    const online = isOnline();
+
+    // 1. Chrome Built-in AI (window.ai / Gemini Nano) — zero download, all devices
+    if(wantsAI && windowAiSupported()){
+      setQuestStatus(book.id, "requesting Chrome AI objects");
+      let objects = null;
+      try{
+        const raw = await requestWindowAiQuestObjects(book, count, lang);
+        objects = sanitizeQuestObjects(raw, count);
+        if(!objects){
+          setQuestStatus(book.id, "Chrome AI retry");
+          const retryRaw = await requestWindowAiQuestObjects(book, count, lang);
+          objects = sanitizeQuestObjects(retryRaw, count);
         }
-        setQuestStatus(book.id, `${reason} → ${fallbackLabel}`);
-        if(fallback.length){
-          if(!state.books || !state.books[book.id]) return;
-          book.quest.objects = fallback;
-          book.quest.generatedAt = new Date().toISOString();
-          book.quest.method = "heuristic";
-          save();
-          renderAll();
-        }
+      }catch(_){}
+      if(objects && objects.length){
+        setQuestStatus(book.id, "Chrome AI success");
+        commitObjects(objects, "window-ai");
+        return;
       }
-      return;
+      setQuestStatus(book.id, "Chrome AI failed → trying next engine");
     }
 
-    if(!_webLLMEngine){
-      if(queueForAI) _webLLMPendingBooks.add(book.id);
-      maybeAutoStartWebLLM(force);
-      if(allowFallback){
-        setQuestStatus(book.id, _webLLMLoading ? "model downloading → queued (fallback shown)" : "model not ready → queued (fallback shown)");
-        const heuristic = heuristicQuestObjectsFromSynopsis(synopsis, book.quest && book.quest.seed);
-        const fallback = heuristic.length ? heuristic : pickQuestFallbackObjects(book);
-        if(fallback.length){
-          if(!state.books || !state.books[book.id]) return;
-          book.quest.objects = fallback;
-          book.quest.generatedAt = new Date().toISOString();
-          book.quest.method = "heuristic";
-          save();
-          renderAll();
+    // 2. WebLLM (WebGPU — desktop Chrome/Edge)
+    if(wantsAI && webgpuSupported() && online){
+      if(!_webLLMEngine){
+        if(queueForAI) _webLLMPendingBooks.add(book.id);
+        maybeAutoStartWebLLM(force);
+        if(allowFallback){
+          setQuestStatus(book.id, _webLLMLoading ? "model downloading → queued (fallback shown)" : "model not ready → queued (fallback shown)");
+          const heuristic = heuristicQuestObjectsFromSynopsis(synopsis, book.quest && book.quest.seed, count);
+          const fallback = heuristic.length ? heuristic : pickQuestFallbackObjects(book, count);
+          if(fallback.length) commitObjects(fallback, "heuristic");
         }
+        return;
       }
-      return;
+      let objects = null;
+      try{
+        setQuestStatus(book.id, "requesting WebLLM objects");
+        const raw = await requestWebGPUQuestObjects(book, count, lang);
+        objects = sanitizeQuestObjects(raw, count);
+        if(!objects){
+          setQuestStatus(book.id, "WebLLM retry");
+          const retryRaw = await requestWebGPUQuestObjects(book, count, lang);
+          objects = sanitizeQuestObjects(retryRaw, count);
+        }
+      }catch(_){}
+      if(objects && objects.length){
+        setQuestStatus(book.id, "WebLLM success");
+        commitObjects(objects, "webgpu-llm");
+        return;
+      }
+      setQuestStatus(book.id, "WebLLM failed → trying next engine");
     }
 
-    let objects = null;
-    try{
-      setQuestStatus(book.id, "requesting AI objects");
-      const raw = await requestWebGPUQuestObjects(book);
-      objects = sanitizeQuestObjects(raw);
-      if(!objects){
-        setQuestStatus(book.id, "AI retry");
-        const retryRaw = await requestWebGPUQuestObjects(book);
-        objects = sanitizeQuestObjects(retryRaw);
+    // 3. Transformers.js (mobile/Safari — WebAssembly, ~80MB download)
+    if(wantsAI && !webgpuSupported() && !windowAiSupported() && online){
+      if(!_transformersEngine){
+        if(queueForAI) _transformersPendingBooks.add(book.id);
+        startTransformersLoad();
+        if(allowFallback){
+          setQuestStatus(book.id, _transformersLoading ? "lite model downloading → queued (fallback shown)" : "lite model not ready → queued (fallback shown)");
+          const heuristic = heuristicQuestObjectsFromSynopsis(synopsis, book.quest && book.quest.seed, count);
+          const fallback = heuristic.length ? heuristic : pickQuestFallbackObjects(book, count);
+          if(fallback.length) commitObjects(fallback, "heuristic");
+        }
+        return;
       }
-    }catch(_){}
-
-    if(objects && objects.length){
-      if(!state.books || !state.books[book.id]) return;
-      book.quest.objects = objects;
-      book.quest.generatedAt = new Date().toISOString();
-      book.quest.method = "webgpu-llm";
-      setQuestStatus(book.id, "AI success");
-      save();
-      renderAll();
-      return;
+      let objects = null;
+      try{
+        setQuestStatus(book.id, "requesting Transformers.js objects");
+        const raw = await requestTransformersQuestObjects(book, count, lang);
+        objects = sanitizeQuestObjects(raw, count);
+        if(!objects){
+          setQuestStatus(book.id, "Transformers.js retry");
+          const retryRaw = await requestTransformersQuestObjects(book, count, lang);
+          objects = sanitizeQuestObjects(retryRaw, count);
+        }
+      }catch(_){}
+      if(objects && objects.length){
+        setQuestStatus(book.id, "Transformers.js success");
+        commitObjects(objects, "transformers-js");
+        return;
+      }
+      setQuestStatus(book.id, "Transformers.js failed → heuristic fallback");
     }
 
+    // 4. Heuristic / pool fallback
     if(!allowFallback){
-      setQuestStatus(book.id, "AI failed → keeping fallback");
+      setQuestStatus(book.id, "AI failed → keeping existing fallback");
       return;
     }
-    if(allowFallback){
-      setQuestStatus(book.id, "AI failed → heuristic fallback");
-      const heuristic = heuristicQuestObjectsFromSynopsis(synopsis, book.quest && book.quest.seed);
-      const fallback = heuristic.length ? heuristic : pickQuestFallbackObjects(book);
-      if(fallback.length){
-        if(!state.books || !state.books[book.id]) return;
-        book.quest.objects = fallback;
-        book.quest.generatedAt = new Date().toISOString();
-        book.quest.method = "heuristic";
-        save();
-        renderAll();
-      }
+    const heuristic = heuristicQuestObjectsFromSynopsis(synopsis, book.quest && book.quest.seed, count);
+    const fallback = heuristic.length ? heuristic : pickQuestFallbackObjects(book, count);
+    if(fallback.length){
+      const reason = !wantsAI ? "ai disabled" : !online ? "offline" : "ai unavailable";
+      setQuestStatus(book.id, `${reason} → ${heuristic.length ? "heuristic" : "fallback pool"}`);
+      commitObjects(fallback, "heuristic");
     }
   }finally{
     _questPending.delete(book.id);
@@ -1198,6 +1402,10 @@ async function enrichBookFromGoogle(book, mode){
       book.publisher = info.publisher;
       changed = true;
     }
+    if(!book.language && info.language){
+      book.language = info.language;
+      changed = true;
+    }
     if(changed){
       save();
       renderAll();
@@ -1249,6 +1457,7 @@ function ensureDefaultBook(){
     rating: "",
     finishedAt: null,
     synopsis: "",
+    language: "",
     googleBooks: { id: "", fetchedAt: "" },
     quest: { objects: [], generatedAt: "", method: "", thresholds: QUEST_THRESHOLDS.slice(), seed: 0 }
   };
@@ -2130,6 +2339,7 @@ function addBook(){
     rating: "",
     finishedAt: null,
     synopsis: "",
+    language: "",
     googleBooks: { id: "", fetchedAt: "" },
     quest: { objects: [], generatedAt: "", method: "", thresholds: QUEST_THRESHOLDS.slice(), seed: 0 }
   };
@@ -2784,7 +2994,7 @@ async function drivePull(){
     if(appLangSelect) appLangSelect.value = state.settings.lang || "en-GB";
     updateAiUI();
     if(state.settings.aiEnabled){
-      maybeAutoStartWebLLM(true);
+      maybeAutoStartAI(true);
     }
     applyTimerState();
     save();
