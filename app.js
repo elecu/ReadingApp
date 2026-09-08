@@ -1099,7 +1099,16 @@ async function dismissBookMatchPicker(){
   closeBookMatchPicker();
   const book = state.books && state.books[bookId];
   if(!book) return;
-  setGoogleBooksStatus(book.id, "user declined all matches");
+  setGoogleBooksStatus(book.id, "user declined all matches → trying Wikipedia");
+  // Wikipedia is looked up by title/author, not by a chosen catalogue record, so
+  // declining every candidate still leaves it as a source worth trying.
+  if(await ensurePlotSummary(book)) save();
+  if(!state.books || !state.books[book.id]) return;
+  if(!questSourceText(book).text){
+    setGoogleBooksStatus(book.id, "no synopsis anywhere → generic pool");
+    showToast(t("matchNoSynopsisFound"));
+  }
+  renderAll();
   await generateQuestObjectsForBook(book, { force: true });
 }
 
