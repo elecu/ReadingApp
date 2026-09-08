@@ -48,7 +48,23 @@ const QUEST_FALLBACK_POOL = [
   "highlighter","sticky note","paper clip","envelope","letter",
   "map","key","candle","lamp","magnifying glass"
 ];
-const QUEST_ABSTRACT_TERMS = new Set(["love","life","time","world","destiny","meaning","truth","power"]);
+const QUEST_ABSTRACT_TERMS = new Set([
+  "love","life","time","world","destiny","meaning","truth","power",
+  // Political/philosophical dystopian fiction leans hard on abstract systems
+  // and ideologies rather than props, so those get named a lot too. Covers
+  // English and Spanish only (the app's two shipped UI languages) -- not the
+  // ~50 languages the AI can be asked to answer in.
+  "socialism","communism","capitalism","fascism","totalitarianism","democracy",
+  "government","society","ideology","revolution","party","state","nation",
+  "country","freedom","justice","religion","war","class","equality",
+  "socialismo","comunismo","capitalismo","fascismo","totalitarismo","democracia",
+  "gobierno","sociedad","ideologia","revolucion","partido","estado","nacion",
+  "pais","libertad","justicia","religion","guerra","clase","igualdad"
+]);
+// "-ism" and its Spanish/French/German/Italian cognates name a system of
+// belief, not a thing -- catches socialismo/comunismo/capitalismo and their
+// English equivalents even when they aren't in the curated list above.
+const QUEST_ISM_SUFFIX = /(isms?|ismos?|ismes?|ismus|izm)$/;
 const QUEST_STOPWORDS = new Set([
   "a","an","the","and","or","but","if","so","no","yes","to","of","in","on","at","by","as","is","it","its","into",
   "from","for","with","that","this","these","those","there","here","then","than","when","where","which","what","who",
@@ -820,10 +836,16 @@ function truncatePlot(text){
   return (lastStop > budget * 0.5 ? slice.slice(0, lastStop + 1) : slice).trim();
 }
 
-async function fetchWikipediaPlot(title, author, lang){
+async function fetchWikipediaPlot(title, author, ...langCandidates){
+  // Try, in order: the edition's already-known language, then the reader's UI
+  // language as a hint of what edition they likely own, then English as the
+  // broadest-coverage fallback. Whichever one actually finds an article wins,
+  // and that becomes the edition's language from then on (see ensurePlotSummary).
   const langs = [];
-  const primary = (lang || "").split("-")[0].toLowerCase();
-  if(primary) langs.push(primary);
+  for(const cand of langCandidates){
+    const code = String(cand || "").split("-")[0].toLowerCase();
+    if(code && !langs.includes(code)) langs.push(code);
+  }
   if(!langs.includes("en")) langs.push("en");
   for(const code of langs){
     try{
@@ -1003,7 +1025,8 @@ async function ensurePlotSummary(book){
   const author = (book.author || "").trim();
   if(!title) return false;
   setGoogleBooksStatus(book.id, "searching Wikipedia plot");
-  const found = await fetchWikipediaPlot(title, author, book.language || state.settings.lang);
+  const uiLang = state.settings && state.settings.lang;
+  const found = await fetchWikipediaPlot(title, author, book.language, uiLang);
   if(!state.books || !state.books[book.id]) return false;
   if(!found){
     setGoogleBooksStatus(book.id, "no Wikipedia plot section");
@@ -1016,6 +1039,10 @@ async function ensurePlotSummary(book){
     section: found.section,
     fetchedAt: new Date().toISOString()
   };
+  // Lock the book to whichever edition's Wikipedia article we actually found,
+  // so quest objects are generated in that same language from now on instead
+  // of drifting to the reader's UI language.
+  if(!book.language) book.language = found.lang;
   setGoogleBooksStatus(book.id, `Wikipedia plot from ${found.lang}:${found.article}`);
   return true;
 }
@@ -1278,10 +1305,11 @@ function sanitizeQuestObjects(raw, count){
     if(val.length < 2 || val.length > 30) continue;
     if(!/^[\p{L}][\p{L}\s-]*$/u.test(val)) continue;
     const tokens = val.split(/[\s-]+/g).filter(Boolean);
-    // Reject only when the whole phrase is abstract ("time" alone, "world power").
-    // A compound like "time machine" or "power drill" pairs an abstract word
+    const isAbstractToken = (tok) => QUEST_ABSTRACT_TERMS.has(tok) || (tok.length >= 5 && QUEST_ISM_SUFFIX.test(tok));
+    // Reject only when the whole phrase is abstract ("socialismo" alone, "world power").
+    // A compound like "time machine" or "communism flag" pairs an abstract word
     // with a genuinely physical one, so it stays.
-    if(tokens.every(tok => QUEST_ABSTRACT_TERMS.has(tok))) continue;
+    if(tokens.every(isAbstractToken)) continue;
     cleaned.push(val);
   }
   const unique = Array.from(new Set(cleaned));
