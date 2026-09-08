@@ -59,7 +59,8 @@ const QUEST_ABSTRACT_TERMS = new Set([
   "country","freedom","justice","religion","war","class","equality",
   "socialismo","comunismo","capitalismo","fascismo","totalitarismo","democracia",
   "gobierno","sociedad","ideologia","revolucion","partido","estado","nacion",
-  "pais","libertad","justicia","religion","guerra","clase","igualdad"
+  "pais","libertad","justicia","religion","guerra","clase","igualdad",
+  "soviet","orthodoxy","autocracy","bureaucracy","sovietico","ortodoxia","autocracia","burocracia"
 ]);
 // "-ism" and its Spanish/French/German/Italian cognates name a system of
 // belief, not a thing -- catches socialismo/comunismo/capitalismo and their
@@ -78,8 +79,8 @@ const QUEST_STOPWORDS = new Set([
   "ser","estar","hay","hace","hacia","desde","hasta","mas","muy","ya","en",
   // "Empty" nouns: grammatically fine anywhere but never a physical thing in
   // any story ("at some point", "in a way", "that kind of person").
-  "point","part","way","kind","sort","side","case","fact","matter","sense","moment","thing","things",
-  "punto","parte","manera","modo","tipo","lado","caso","hecho","sentido","momento","cosa","cosas"
+  "point","part","way","kind","sort","side","case","fact","matter","sense","moment","thing","things","according",
+  "punto","parte","manera","modo","tipo","lado","caso","hecho","sentido","momento","cosa","cosas","segun"
 ]);
 
 const I18N = {
@@ -398,6 +399,16 @@ const _googleBooksPending = new Set();
 const _questPending = new Set();
 const _webLLMPendingBooks = new Set();
 const _questStatus = {};
+const _aiRawLog = {};
+function recordAiRaw(bookId, engine, raw, afterFormat, afterGrounding){
+  _aiRawLog[bookId] = {
+    engine,
+    raw: Array.isArray(raw) ? raw : (raw == null ? null : raw),
+    afterFormat: afterFormat || null,
+    afterGrounding: afterGrounding || null,
+    at: new Date().toISOString()
+  };
+}
 const _googleBooksStatus = {};
 let _webLLM = null;
 let _webLLMEngine = null;
@@ -1835,6 +1846,15 @@ async function generateQuestObjectsForBook(book, options){
   _questPending.add(book.id);
 
   let chosen = { text: "", source: "" };
+  // The final "ai unavailable" status normally overwrites whatever an engine
+  // reported on its way out, so the one useful piece of information (why the
+  // AI's answer got thrown away) never reached the debug panel. Keep a short
+  // trail instead of a single mutable status string.
+  const attempts = [];
+  function note(msg){
+    setQuestStatus(book.id, msg);
+    attempts.push(msg);
+  }
   const count = questObjectCountForBook(book);
   const lang = book.language || (state.settings && state.settings.lang) || "en-GB";
   const computedThresholds = computeQuestThresholds(count);
@@ -1876,19 +1896,24 @@ async function generateQuestObjectsForBook(book, options){
     if(wantsAI && windowAiSupported()){
       setQuestStatus(book.id, "requesting Chrome AI objects");
       let objects = null;
+      let lastRaw = null;
       try{
         const raw = await requestWindowAiQuestObjects(book, count, lang);
+        lastRaw = raw;
         objects = sanitizeQuestObjects(raw, count);
         if(!objects){
           setQuestStatus(book.id, "Chrome AI retry");
           const retryRaw = await requestWindowAiQuestObjects(book, count, lang);
+          lastRaw = retryRaw;
           objects = sanitizeQuestObjects(retryRaw, count);
         }
       }catch(_){}
+      recordAiRaw(book.id, "window-ai", lastRaw, objects);
       if(objects && objects.length){
         const grounded = groundQuestObjects(objects, synopsis, sameLang);
+        if(_aiRawLog[book.id]) _aiRawLog[book.id].afterGrounding = grounded;
         if(!grounded.length){
-          setQuestStatus(book.id, "Chrome AI output not grounded in source text → discarded");
+          note("Chrome AI output not grounded in source text → discarded");
         }
         objects = grounded;
       }
@@ -1897,7 +1922,7 @@ async function generateQuestObjectsForBook(book, options){
         commitObjects(objects, "window-ai");
         return;
       }
-      setQuestStatus(book.id, "Chrome AI failed → trying next engine");
+      note("Chrome AI failed → trying next engine");
     }
 
     // 2. WebLLM (WebGPU — desktop Chrome/Edge). Skipped once it has proven
@@ -1917,20 +1942,25 @@ async function generateQuestObjectsForBook(book, options){
         return;
       }
       let objects = null;
+      let lastRaw = null;
       try{
         setQuestStatus(book.id, "requesting WebLLM objects");
         const raw = await requestWebGPUQuestObjects(book, count, lang);
+        lastRaw = raw;
         objects = sanitizeQuestObjects(raw, count);
         if(!objects){
           setQuestStatus(book.id, "WebLLM retry");
           const retryRaw = await requestWebGPUQuestObjects(book, count, lang);
+          lastRaw = retryRaw;
           objects = sanitizeQuestObjects(retryRaw, count);
         }
       }catch(_){}
+      recordAiRaw(book.id, "webgpu-llm", lastRaw, objects);
       if(objects && objects.length){
         const grounded = groundQuestObjects(objects, synopsis, sameLang);
+        if(_aiRawLog[book.id]) _aiRawLog[book.id].afterGrounding = grounded;
         if(!grounded.length){
-          setQuestStatus(book.id, "WebLLM output not grounded in source text → discarded");
+          note("WebLLM output not grounded in source text → discarded");
         }
         objects = grounded;
       }
@@ -1939,7 +1969,7 @@ async function generateQuestObjectsForBook(book, options){
         commitObjects(objects, "webgpu-llm");
         return;
       }
-      setQuestStatus(book.id, "WebLLM failed → trying next engine");
+      note("WebLLM failed → trying next engine");
     }
 
     // 3. Transformers.js (mobile/Safari, or any device whose WebLLM attempt
@@ -1957,20 +1987,25 @@ async function generateQuestObjectsForBook(book, options){
         return;
       }
       let objects = null;
+      let lastRaw = null;
       try{
         setQuestStatus(book.id, "requesting Transformers.js objects");
         const raw = await requestTransformersQuestObjects(book, count, lang);
+        lastRaw = raw;
         objects = sanitizeQuestObjects(raw, count);
         if(!objects){
           setQuestStatus(book.id, "Transformers.js retry");
           const retryRaw = await requestTransformersQuestObjects(book, count, lang);
+          lastRaw = retryRaw;
           objects = sanitizeQuestObjects(retryRaw, count);
         }
       }catch(_){}
+      recordAiRaw(book.id, "transformers-js", lastRaw, objects);
       if(objects && objects.length){
         const grounded = groundQuestObjects(objects, synopsis, sameLang);
+        if(_aiRawLog[book.id]) _aiRawLog[book.id].afterGrounding = grounded;
         if(!grounded.length){
-          setQuestStatus(book.id, "Transformers.js output not grounded in source text → discarded");
+          note("Transformers.js output not grounded in source text → discarded");
         }
         objects = grounded;
       }
@@ -1979,7 +2014,7 @@ async function generateQuestObjectsForBook(book, options){
         commitObjects(objects, "transformers-js");
         return;
       }
-      setQuestStatus(book.id, "Transformers.js failed → heuristic fallback");
+      note("Transformers.js failed → heuristic fallback");
     }
 
     // 4. Heuristic / pool fallback
@@ -1990,7 +2025,8 @@ async function generateQuestObjectsForBook(book, options){
     const heuristic = heuristicQuestObjectsFromSynopsis(synopsis, book.quest && book.quest.seed, count);
     const fallback = heuristic.length ? heuristic : pickQuestFallbackObjects(book, count);
     if(fallback.length){
-      const reason = !wantsAI ? "ai disabled" : !online ? "offline" : "ai unavailable";
+      const reason = !wantsAI ? "ai disabled" : !online ? "offline"
+        : attempts.length ? attempts[attempts.length - 1] : "ai unavailable";
       setQuestStatus(book.id, `${reason} → ${heuristic.length ? "heuristic" : "generic pool"}`);
       commitObjects(fallback, heuristic.length ? "heuristic" : "pool");
     }
@@ -2742,6 +2778,18 @@ function renderQuestChecklist(book){
   }).join("");
 }
 
+function aiRawLogLines(bookId){
+  const log = _aiRawLog[bookId];
+  if(!log) return [`AI last attempt: \u2014`];
+  const showList = (arr) => Array.isArray(arr) ? (arr.length ? arr.join(", ") : "(empty)") : "\u2014";
+  return [
+    `AI last attempt (${log.engine}) @ ${log.at}:`,
+    `  1. model said: ${showList(log.raw)}`,
+    `  2. passed format check: ${showList(log.afterFormat)}`,
+    `  3. passed grounding check: ${showList(log.afterGrounding)}`
+  ];
+}
+
 function renderQuestDebug(book){
   const container = $("questDebug");
   if(!container) return;
@@ -2802,7 +2850,8 @@ function renderQuestDebug(book){
     `AI status: ${getAiStatusText()}`,
     `WebLLM failure reason: ${_webLLMFailed ? (_webLLMLastStatus || "unknown") : "\u2014"}`,
     `Transformers.js: ${_transformersEngine ? "ready" : _transformersLoading ? "downloading" : _transformersFailed ? "failed" : "idle"}`,
-    `AI queue: ${_webLLMPendingBooks.size}`
+    `AI queue: ${_webLLMPendingBooks.size}`,
+    ...aiRawLogLines(book.id)
   ];
   container.textContent = lines.join("\n");
 }
