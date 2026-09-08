@@ -609,6 +609,22 @@ function normalizeMatchStr(input){
     .replace(/\s+/g, " ");
 }
 
+/* Names arrive in every order and with patronymics attached: "Voinovich
+   Vladimir" has to match "Vladimir Nikolaevich Voinovich". Comparing whole
+   strings with includes() fails all of those, so compare token sets instead. */
+function authorTokens(name){
+  return normalizeMatchStr(name).split(" ").filter(tok => tok.length >= 2);
+}
+
+function authorsMatch(userAuthor, candidateAuthor){
+  const a = authorTokens(userAuthor);
+  const b = authorTokens(candidateAuthor);
+  if(!a.length || !b.length) return false;
+  const shorter = a.length <= b.length ? a : b;
+  const longer = new Set(a.length <= b.length ? b : a);
+  return shorter.every(tok => longer.has(tok));
+}
+
 function googleBooksStrictMatch(userTitle, userAuthor, candidateTitle, candidateAuthors){
   const ut = normalizeMatchStr(userTitle);
   const ua = normalizeMatchStr(userAuthor);
@@ -618,9 +634,7 @@ function googleBooksStrictMatch(userTitle, userAuthor, candidateTitle, candidate
   if(!titleMatch) return false;
   const authors = Array.isArray(candidateAuthors) ? candidateAuthors : (candidateAuthors ? [candidateAuthors] : []);
   for(const author of authors){
-    const ca = normalizeMatchStr(author);
-    if(!ca) continue;
-    if(ca.includes(ua) || ua.includes(ca)) return true;
+    if(authorsMatch(ua, author)) return true;
   }
   return false;
 }
@@ -638,6 +652,7 @@ function googleBooksMatchScore(userTitle, userAuthor, candidateTitle, candidateA
     const ca = normalizeMatchStr(author);
     if(!ca) continue;
     if(ca === ua) score += 3;
+    else if(authorsMatch(ua, ca)) score += 2;
     else if(ca.includes(ua) || ua.includes(ca)) score += 1;
   }
   return score;
