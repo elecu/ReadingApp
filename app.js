@@ -1395,13 +1395,15 @@ function langCodeToName(lang){
 function questPromptForSynopsis(count, lang){
   const n = count || 4;
   const langName = langCodeToName(lang);
+  // Kept deliberately short: the on-device models this runs against are as
+  // small as 0.5B parameters, and a longer, multi-clause instruction made
+  // them ramble instead of closing valid JSON (verified: it started replying
+  // with no parseable array at all once the prompt grew past ~5 sentences).
   return [
-    "You are given a summary of a book's plot.",
-    `Invent exactly ${n} concrete, tangible objects a reader could physically hold, one per key story element (a character, faction, place, rule or idea mentioned below).`,
-    "If the element itself isn't physical (an organization, a title, a system, a concept), turn it into a believable prop by pairing it with an everyday object: a spy agency becomes its badge, a ruler's title becomes their sealed decree, a rationing rule becomes a ration ticket, a journey through time becomes a time machine.",
-    "Every object must connect to something actually mentioned in the summary below, not to unrelated generic ideas.",
-    "Order the objects by story progression, earliest first, to avoid spoiling the ending.",
-    `Reply ONLY with a JSON array of exactly ${n} short object names in ${langName}, lowercase.`
+    "You are given a short book plot summary.",
+    `Name exactly ${n} concrete physical objects from the story, one per key scene, earliest first.`,
+    "If something isn't physical (an organization, a title, an idea), name a real object linked to it instead, like a badge for a spy agency.",
+    `Reply with ONLY a JSON array of ${n} short lowercase names in ${langName}. No extra text.`
   ].join(" ");
 }
 
@@ -1583,9 +1585,24 @@ function extractJsonArray(text){
   const slice = cleaned.slice(start, end + 1);
   try{
     return JSON.parse(slice);
-  }catch(_){
-    return null;
-  }
+  }catch(_){}
+  // Small on-device models routinely produce near-JSON rather than JSON:
+  // 'single quotes' instead of "double quotes", or a trailing comma before
+  // the closing bracket. Both are cheap, safe to repair before giving up.
+  try{
+    const repaired = slice
+      .replace(/'([^']*)'/g, (_, inner) => `"${inner.replace(/"/g, "'")}"`)
+      .replace(/,\s*\]/g, "]");
+    return JSON.parse(repaired);
+  }catch(_){}
+  // Last resort: treat the bracket contents as a plain comma-separated list
+  // even if it never was valid JSON at all (no quotes, stray semicolons...).
+  const inner = slice.slice(1, -1).trim();
+  if(!inner) return null;
+  const items = inner.split(",")
+    .map(item => item.trim().replace(/^['"]+|['"]+$/g, ""))
+    .filter(Boolean);
+  return items.length ? items : null;
 }
 
 function buildWebLLMAppConfig(webllm){
@@ -1731,9 +1748,9 @@ async function flushTransformersPendingBooks(){
   }
 }
 
-async function requestTransformersQuestObjects(book, count, lang){
+async function requestTransformersQuestObjects(book, count, lang, sourceText){
   if(!_transformersEngine) return null;
-  const prompt = `${questPromptForSynopsis(count, lang)}\nTitle: ${book.title || ""}\nSynopsis: ${stripHtml(book.synopsis || "")}`;
+  const prompt = `${questPromptForSynopsis(count, lang)}\nTitle: ${book.title || ""}\nSynopsis: ${sourceText || ""}`;
   try{
     const output = await _transformersEngine(prompt, { max_new_tokens: 120, temperature: 0.2 });
     const text = output && output[0] && output[0].generated_text ? output[0].generated_text : "";
@@ -1743,12 +1760,11 @@ async function requestTransformersQuestObjects(book, count, lang){
   }
 }
 
-async function requestWebGPUQuestObjects(book, count, lang){
+async function requestWebGPUQuestObjects(book, count, lang, sourceText){
   if(!_webLLMEngine) return null;
-  const synopsis = book.synopsis || "";
   const messages = [
     { role: "system", content: questPromptForSynopsis(count, lang) },
-    { role: "user", content: `Title: ${book.title || ""}\nAuthor: ${book.author || ""}\nSynopsis: ${stripHtml(synopsis)}` }
+    { role: "user", content: `Title: ${book.title || ""}\nAuthor: ${book.author || ""}\nSynopsis: ${sourceText || ""}` }
   ];
   try{
     const result = await _webLLMEngine.chat.completions.create({
@@ -1765,7 +1781,7 @@ async function requestWebGPUQuestObjects(book, count, lang){
   }
 }
 
-async function requestWindowAiQuestObjects(book, count, lang){
+async function requestWindowAiQuestObjects(book, count, lang, sourceText){
   try{
     if(!windowAiSupported()) return null;
     const capabilities = await window.ai.languageModel.capabilities();
@@ -1773,7 +1789,7 @@ async function requestWindowAiQuestObjects(book, count, lang){
     const session = await window.ai.languageModel.create({
       systemPrompt: questPromptForSynopsis(count, lang)
     });
-    const prompt = `Title: ${book.title || ""}\nAuthor: ${book.author || ""}\nSynopsis: ${stripHtml(book.synopsis || "")}`;
+    const prompt = `Title: ${book.title || ""}\nAuthor: ${book.author || ""}\nSynopsis: ${sourceText || ""}`;
     const text = await session.prompt(prompt);
     session.destroy();
     return extractJsonArray(text);
@@ -1898,12 +1914,12 @@ async function generateQuestObjectsForBook(book, options){
       let objects = null;
       let lastRaw = null;
       try{
-        const raw = await requestWindowAiQuestObjects(book, count, lang);
+        const raw = await requestWindowAiQuestObjects(book, count, lang, synopsis);
         lastRaw = raw;
         objects = sanitizeQuestObjects(raw, count);
         if(!objects){
           setQuestStatus(book.id, "Chrome AI retry");
-          const retryRaw = await requestWindowAiQuestObjects(book, count, lang);
+          const retryRaw = await requestWindowAiQuestObjects(book, count, lang, synopsis);
           lastRaw = retryRaw;
           objects = sanitizeQuestObjects(retryRaw, count);
         }
@@ -1945,12 +1961,12 @@ async function generateQuestObjectsForBook(book, options){
       let lastRaw = null;
       try{
         setQuestStatus(book.id, "requesting WebLLM objects");
-        const raw = await requestWebGPUQuestObjects(book, count, lang);
+        const raw = await requestWebGPUQuestObjects(book, count, lang, synopsis);
         lastRaw = raw;
         objects = sanitizeQuestObjects(raw, count);
         if(!objects){
           setQuestStatus(book.id, "WebLLM retry");
-          const retryRaw = await requestWebGPUQuestObjects(book, count, lang);
+          const retryRaw = await requestWebGPUQuestObjects(book, count, lang, synopsis);
           lastRaw = retryRaw;
           objects = sanitizeQuestObjects(retryRaw, count);
         }
@@ -1990,12 +2006,12 @@ async function generateQuestObjectsForBook(book, options){
       let lastRaw = null;
       try{
         setQuestStatus(book.id, "requesting Transformers.js objects");
-        const raw = await requestTransformersQuestObjects(book, count, lang);
+        const raw = await requestTransformersQuestObjects(book, count, lang, synopsis);
         lastRaw = raw;
         objects = sanitizeQuestObjects(raw, count);
         if(!objects){
           setQuestStatus(book.id, "Transformers.js retry");
-          const retryRaw = await requestTransformersQuestObjects(book, count, lang);
+          const retryRaw = await requestTransformersQuestObjects(book, count, lang, synopsis);
           lastRaw = retryRaw;
           objects = sanitizeQuestObjects(retryRaw, count);
         }
