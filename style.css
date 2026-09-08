@@ -618,3 +618,57 @@ canvas{
   font-weight:700;
   color:var(--text);
 }
+
+/* Quest source legend */
+.questSource{
+  font-size:12px;
+  margin:2px 0 8px;
+  opacity:0.85;
+}
+.questSource:empty{display:none}
+.questSource.ok{color:var(--ok, #6ee7a8)}
+.questSource.weak{color:var(--warn, #f2c94c)}
+
+/* Book match picker */
+.matchList{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-height:60vh;
+  overflow-y:auto;
+  margin-top:10px;
+}
+.matchItem{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  text-align:left;
+  width:100%;
+  padding:10px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,0.03);
+  color:inherit;
+  font:inherit;
+  cursor:pointer;
+}
+.matchItem:hover,
+.matchItem:focus-visible{
+  border-color:var(--accent, #8ab4ff);
+  background:rgba(255,255,255,0.07);
+}
+.matchCover{
+  width:56px;
+  height:84px;
+  flex:0 0 56px;
+  object-fit:cover;
+  border-radius:6px;
+  background:rgba(255,255,255,0.06);
+}
+.matchCoverEmpty{border:1px dashed var(--line)}
+.matchInfo{min-width:0}
+.matchTitle{font-weight:600; font-size:14px}
+.matchAuthor{font-size:13px; opacity:0.85}
+.matchMeta{font-size:12px; opacity:0.7; margin-top:2px}
+.matchSnippet{font-size:12px; opacity:0.75; margin-top:6px; line-height:1.4}
+.matchProvider{font-size:11px; opacity:0.6; margin-top:6px; text-transform:uppercase; letter-spacing:0.04em}

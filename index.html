@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#0f0f10" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./style.css?v=20250117" />
+  <link rel="stylesheet" href="./style.css?v=20260908" />
   <link rel="preconnect" href="https://accounts.google.com" />
   <link rel="preconnect" href="https://apis.google.com" />
   <link rel="preconnect" href="https://www.googleapis.com" />
@@ -337,6 +337,7 @@
             </div>
             <hr class="sep" />
             <div class="questTitle" data-i18n="questTitle">Quest objects</div>
+            <div id="questSource" class="questSource"></div>
             <div id="questChecklist" class="questChecklist"></div>
           </section>
         </div>
@@ -578,13 +579,24 @@
     </div>
   </div>
 
+  <div class="modalOverlay" id="matchOverlay" aria-hidden="true">
+    <div class="modal modalWide" role="dialog" aria-modal="true" aria-labelledby="matchTitle">
+      <h3 id="matchTitle" data-i18n="matchTitle">Which edition is it?</h3>
+      <div class="notice" id="matchSubtitle"></div>
+      <div id="matchList" class="matchList"></div>
+      <div class="modalActions">
+        <button class="btn" id="matchNone" type="button" data-i18n="matchNoneBtn">None of these &mdash; enter manually</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" async defer></script>
-  <script src="./i18n.es.js?v=20250117"></script>
-  <script src="./config.js?v=20250117"></script>
-  <script src="./app.js?v=20250117"></script>
+  <script src="./i18n.es.js?v=20260908"></script>
+  <script src="./config.js?v=20260908"></script>
+  <script src="./app.js?v=20260908"></script>
 </body>
 </html>
