@@ -75,7 +75,11 @@ const QUEST_STOPWORDS = new Set([
   "el","la","los","las","un","una","unos","unas","y","o","u","de","del","al","que","como","por","para","con","sin",
   "sobre","entre","cuando","donde","quien","quienes","cual","cuales","su","sus","mi","mis","tu","tus","nuestro",
   "nuestra","nuestros","nuestras","ellos","ellas","ella","lo","le","les","se","es","son","era","eran","fue","fueron",
-  "ser","estar","hay","hace","hacia","desde","hasta","mas","muy","ya","en"
+  "ser","estar","hay","hace","hacia","desde","hasta","mas","muy","ya","en",
+  // "Empty" nouns: grammatically fine anywhere but never a physical thing in
+  // any story ("at some point", "in a way", "that kind of person").
+  "point","part","way","kind","sort","side","case","fact","matter","sense","moment","thing","things",
+  "punto","parte","manera","modo","tipo","lado","caso","hecho","sentido","momento","cosa","cosas"
 ]);
 
 const I18N = {
@@ -815,8 +819,24 @@ async function findWikipediaArticle(title, author, lang){
 }
 
 function cleanWikiText(html){
-  const text = stripHtml(String(html || "")
-    .replace(/<sup[^>]*>[\s\S]*?<\/sup>/gi, "")     // reference markers
+  if(!html) return "";
+  const raw = String(html);
+  // Wikipedia sections routinely carry inline images with captions
+  // ("Emblem of the USSR and the KGB"), infoboxes and reference markers
+  // inside nested <div>s that a regex can't safely balance-match. A real
+  // DOM removes them correctly regardless of nesting depth.
+  if(typeof DOMParser !== "undefined"){
+    try{
+      const doc = new DOMParser().parseFromString(raw, "text/html");
+      doc.querySelectorAll(
+        "table, sup, style, figure, figcaption, .thumb, .infobox, .mw-editsection, .reference, .noprint"
+      ).forEach(el => el.remove());
+      const text = (doc.body ? doc.body.textContent : "") || "";
+      return text.replace(/\s+/g, " ").replace(/\[\s*edit\s*\]/gi, "").replace(/\[\d+\]/g, "").trim();
+    }catch(_){ /* fall through to the regex path below */ }
+  }
+  const text = stripHtml(raw
+    .replace(/<sup[^>]*>[\s\S]*?<\/sup>/gi, "")
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
     .replace(/<table[^>]*>[\s\S]*?<\/table>/gi, ""));
   return text.replace(/\[\s*edit\s*\]/gi, "").replace(/\[\d+\]/g, "").trim();
@@ -1374,9 +1394,35 @@ function questPromptForSynopsis(count, lang){
   ].join(" ");
 }
 
+// A word that shows up capitalized in the middle of a sentence is almost
+// always a proper noun -- a character, a title, a place -- not a physical
+// object ("Genialissimus", not "wall"). Lowercasing the text before picking
+// candidates throws that signal away, which is how titles and character
+// names kept slipping past the stopword/abstract-term lists no matter how
+// many entries got added to them. This keeps the original casing around
+// just long enough to use it, then still returns lowercase words.
+function properNounWordsIn(text){
+  const proper = new Set();
+  const sentences = String(text || "").split(/(?<=[.!?])\s+/);
+  for(const sentence of sentences){
+    const words = sentence.match(/[\p{L}]+/gu) || [];
+    words.forEach((w, idx) => {
+      // An acronym (KGB, USSR) is never a common noun, sentence-initial or
+      // not. Title-case only counts as a signal away from the sentence start,
+      // since the first word of any sentence is capitalized regardless.
+      const isAllCaps = w.length >= 2 && w === w.toUpperCase() && w !== w.toLowerCase();
+      const isCapitalized = idx > 0 && /^\p{Lu}/u.test(w) && w.slice(1) === w.slice(1).toLowerCase();
+      if(isAllCaps || isCapitalized) proper.add(w.toLowerCase());
+    });
+  }
+  return proper;
+}
+
 function heuristicQuestObjectsFromSynopsis(synopsis, seed, count){
   const target = (count && count > 0) ? count : QUEST_MIN_OBJECTS;
-  const text = stripHtml(synopsis || "").toLowerCase();
+  const rawText = stripHtml(synopsis || "");
+  const properNouns = properNounWordsIn(rawText);
+  const text = rawText.toLowerCase();
   const words = text.match(/[\p{L}]+/gu) || [];
   const picked = [];
   const seen = new Set();
@@ -1385,6 +1431,7 @@ function heuristicQuestObjectsFromSynopsis(synopsis, seed, count){
     if(word.length < 4) continue;
     if(QUEST_STOPWORDS.has(word)) continue;
     if(QUEST_ABSTRACT_TERMS.has(word)) continue;
+    if(properNouns.has(word)) continue;
     if(seen.has(word)) continue;
     seen.add(word);
     picked.push(word);
