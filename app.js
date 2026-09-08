@@ -385,6 +385,8 @@ let _webLLMLoading = false;
 let _webLLMProgress = 0;
 let _webLLMLastStatus = "";
 let _webLLMFailed = false;
+let _webLLMLoadToken = 0;
+const WEBLLM_STALL_TIMEOUT_MS = 60000;
 let _windowAiSession = null;
 let _windowAiFailed = false;
 let _transformersLib = null;
@@ -1412,12 +1414,10 @@ function getAiStatusText(){
   if(windowAiSupported()){
     return t("aiStatusWindowAi");
   }
-  // WebLLM (WebGPU desktop)
-  if(webgpuSupported()){
+  // WebLLM (WebGPU desktop). Once it has proven broken, fall through to the
+  // Transformers.js status below instead of reporting a permanent dead end.
+  if(webgpuSupported() && !_webLLMFailed){
     if(_webLLMEngine) return t("aiStatusReady");
-    if(_webLLMFailed){
-      return _webLLMLastStatus ? `${t("aiStatusFallback")} ${_webLLMLastStatus}` : t("aiStatusFallback");
-    }
     if(_webLLMLoading){
       const pct = Math.max(0, Math.min(100, Math.round((_webLLMProgress || 0) * 100)));
       const base = `${t("aiStatusDownloading", { pct: String(pct) })} ${t("aiStatusFallback")}`;
@@ -1425,7 +1425,7 @@ function getAiStatusText(){
     }
     return `${t("aiStatusIdle")} ${t("aiStatusFallback")}`;
   }
-  // Transformers.js (mobile/Safari)
+  // Transformers.js (mobile/Safari, or WebGPU present but WebLLM failed)
   if(_transformersEngine) return t("aiStatusTransformers");
   if(_transformersFailed) return `${t("aiStatusFallback")}`;
   if(_transformersLoading){
@@ -1445,10 +1445,11 @@ function maybeAutoStartWebLLM(force){
 
 function maybeAutoStartAI(force){
   if(windowAiSupported()) return; // window.ai needs no pre-loading
-  if(webgpuSupported()){
+  if(webgpuSupported() && !_webLLMFailed){
     maybeAutoStartWebLLM(force);
   } else {
-    // Mobile/Safari: pre-load Transformers.js lite model
+    // Mobile/Safari, or WebGPU present but WebLLM already failed: pre-load
+    // the Transformers.js lite model instead of giving up entirely.
     if(!_transformersLoading && !_transformersEngine && !_transformersFailed && state.settings.aiEnabled && isOnline()){
       startTransformersLoad();
     }
@@ -1519,6 +1520,20 @@ async function startWebLLMLoad(){
   _webLLMProgress = 0;
   _webLLMFailed = false;
   updateAiUI();
+  // Some environments (ad/tracker blockers, restrictive mobile carriers) stall
+  // the CDN fetch silently instead of throwing: no progress, no error, forever.
+  // Without a watchdog that leaves the pipeline wedged in "downloading" and
+  // every book stuck on the fallback until the page is reloaded by hand.
+  const loadToken = ++_webLLMLoadToken;
+  const stallTimer = setTimeout(() => {
+    if(_webLLMLoadToken !== loadToken) return; // a newer attempt superseded this one
+    if(_webLLMLoading && _webLLMProgress === 0){
+      _webLLMLoading = false;
+      _webLLMFailed = true;
+      _webLLMLastStatus = "stalled: no progress after 60s (blocked by browser/network?)";
+      updateAiUI();
+    }
+  }, WEBLLM_STALL_TIMEOUT_MS);
   try{
     const webllm = await loadWebLLMLibrary();
     const appConfig = buildWebLLMAppConfig(webllm);
@@ -1552,11 +1567,12 @@ async function startWebLLMLoad(){
     return _webLLMEngine;
   }catch(err){
     _webLLMEngine = null;
-    _webLLMLastStatus = err && err.message ? err.message : "";
+    _webLLMLastStatus = (err && err.message) ? err.message : (err ? String(err) : "unknown error");
     _webLLMFailed = true;
     return null;
   }finally{
-    _webLLMLoading = false;
+    clearTimeout(stallTimer);
+    if(_webLLMLoadToken === loadToken) _webLLMLoading = false;
     updateAiUI();
   }
 }
@@ -1809,8 +1825,11 @@ async function generateQuestObjectsForBook(book, options){
       setQuestStatus(book.id, "Chrome AI failed → trying next engine");
     }
 
-    // 2. WebLLM (WebGPU — desktop Chrome/Edge)
-    if(wantsAI && webgpuSupported() && online){
+    // 2. WebLLM (WebGPU — desktop Chrome/Edge). Skipped once it has proven
+    // broken on this device (_webLLMFailed), so a device that merely reports
+    // navigator.gpu but can't actually run the model isn't stuck here forever.
+    const webllmViable = webgpuSupported() && !_webLLMFailed;
+    if(wantsAI && webllmViable && online){
       if(!_webLLMEngine){
         if(queueForAI) _webLLMPendingBooks.add(book.id);
         maybeAutoStartWebLLM(force);
@@ -1848,8 +1867,9 @@ async function generateQuestObjectsForBook(book, options){
       setQuestStatus(book.id, "WebLLM failed → trying next engine");
     }
 
-    // 3. Transformers.js (mobile/Safari — WebAssembly, ~80MB download)
-    if(wantsAI && !webgpuSupported() && !windowAiSupported() && online){
+    // 3. Transformers.js (mobile/Safari, or any device whose WebLLM attempt
+    // died — WebAssembly, ~80MB download).
+    if(wantsAI && !webllmViable && !windowAiSupported() && online){
       if(!_transformersEngine){
         if(queueForAI) _transformersPendingBooks.add(book.id);
         startTransformersLoad();
@@ -2705,6 +2725,8 @@ function renderQuestDebug(book){
     `AI engine: ${engineState}`,
     `AI download: ${engineProgress}`,
     `AI status: ${getAiStatusText()}`,
+    `WebLLM failure reason: ${_webLLMFailed ? (_webLLMLastStatus || "unknown") : "\u2014"}`,
+    `Transformers.js: ${_transformersEngine ? "ready" : _transformersLoading ? "downloading" : _transformersFailed ? "failed" : "idle"}`,
     `AI queue: ${_webLLMPendingBooks.size}`
   ];
   container.textContent = lines.join("\n");
