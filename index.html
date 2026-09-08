@@ -229,6 +229,12 @@
                 </div>
 
                 <div class="field span2">
+                  <label for="editSynopsis" data-i18n="synopsisLabel">Synopsis (used to generate quest objects)</label>
+                  <textarea id="editSynopsis" rows="5" data-i18n-placeholder="synopsisPlaceholder"
+                    placeholder="Paste a synopsis here if the lookup found none."></textarea>
+                </div>
+
+                <div class="field span2">
                   <div class="row">
                     <button class="btn primary" id="saveBook" type="button" data-i18n="saveBook">Save</button>
                     <button class="btn" id="regenQuest" type="button" data-i18n="questRegenerate">Regenerate quest objects</button>
@@ -499,6 +505,12 @@
                 <label class="toggle">
                   <input id="aiToggle" type="checkbox" />
                   <span data-i18n="aiToggleLabel">Use on-device AI to generate quest objects</span>
+                </label>
+              </div>
+              <div class="row">
+                <label class="toggle">
+                  <input id="plotToggle" type="checkbox" />
+                  <span data-i18n="plotToggleLabel">Use Wikipedia plot summaries (richer objects, opening section only)</span>
                 </label>
               </div>
               <div class="row">
