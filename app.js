@@ -18,13 +18,15 @@ const GOOGLE_BOOKS_API = "https://www.googleapis.com/books/v1/volumes";
 const OPENLIBRARY_SEARCH_API = "https://openlibrary.org/search.json";
 const OPENLIBRARY_BASE = "https://openlibrary.org";
 const OPENLIBRARY_COVER_BASE = "https://covers.openlibrary.org/b/id";
-// Only the opening slice of a plot section is used: it keeps the late-book
-// reveals out, and it is the only way the text fits a small model's context.
-const WIKI_PLOT_FRACTION = 0.4;
-const WIKI_PLOT_MAX_CHARS = 1500;
-// Floor: 40% of an already-short plot section leaves nothing for the model to
-// work with, so short summaries are kept whole.
-const WIKI_PLOT_MIN_CHARS = 400;
+// Objects stay masked ("???") until the reader's own progress unlocks them
+// (questUnlockedCount), so feeding the AI more of the plot doesn't leak
+// anything early — it only gives it more concrete nouns to pick from. The
+// real ceiling is the small on-device model's context window, not spoilers.
+const WIKI_PLOT_FRACTION = 0.75;
+const WIKI_PLOT_MAX_CHARS = 3000;
+// Floor: a tiny fraction of an already-short plot section leaves nothing for
+// the model to work with, so short summaries are kept close to whole.
+const WIKI_PLOT_MIN_CHARS = 600;
 const WIKI_PLOT_SECTIONS = [
   "plot", "plot summary", "synopsis", "summary", "story", "plot outline",
   "argumento", "trama", "sinopsis", "resumen",
@@ -853,6 +855,38 @@ function synopsisRichness(text){
   return unique.size;
 }
 
+/* Small on-device models happily invent generic tropes ("rocket", "moon",
+   "space station") instead of reading the synopsis -- sanitizeQuestObjects
+   only checks shape, not content. This rejects objects that don't actually
+   occur in the text the model was given, when we can trust the language
+   matches (a translated response can't be substring-matched against source
+   prose in a different language). */
+function groundQuestObjects(objects, sourceText, sameLanguage){
+  if(!sameLanguage || !sourceText) return objects;
+  const hay = normalizeMatchStr(sourceText);
+  if(!hay) return objects;
+  return objects.filter(obj => {
+    // A good object is often a two-word prop the model invented around a real
+    // story element ("KGB badge", "ordinary needs ticket"): only the element
+    // itself needs to be grounded, not the descriptor word paired with it.
+    // >= 3 so short but meaningful tokens (acronyms like "KGB") still count.
+    const tokens = obj.split(/[\s-]+/g).filter(tok => tok.length >= 3);
+    if(!tokens.length) return true;
+    return tokens.some(tok => hay.includes(normalizeMatchStr(tok)));
+  });
+}
+
+function plotSourceSameLanguage(book, source, targetLang){
+  const targetCode = String(targetLang || "en").split("-")[0].toLowerCase();
+  if(source === "wikipedia"){
+    const srcCode = (book.plotSource && book.plotSource.lang) ? book.plotSource.lang : "";
+    return Boolean(srcCode) && srcCode === targetCode;
+  }
+  // A back-cover blurb or a hand-typed synopsis was fetched/written for this
+  // same target language, so it is assumed to already match.
+  return source === "blurb" || source === "manual";
+}
+
 function questSourceText(book){
   if(!book) return { text: "", source: "" };
   const options = [];
@@ -1242,7 +1276,10 @@ function sanitizeQuestObjects(raw, count){
     if(val.length < 2 || val.length > 30) continue;
     if(!/^[\p{L}][\p{L}\s-]*$/u.test(val)) continue;
     const tokens = val.split(/[\s-]+/g).filter(Boolean);
-    if(tokens.some(tok => QUEST_ABSTRACT_TERMS.has(tok))) continue;
+    // Reject only when the whole phrase is abstract ("time" alone, "world power").
+    // A compound like "time machine" or "power drill" pairs an abstract word
+    // with a genuinely physical one, so it stays.
+    if(tokens.every(tok => QUEST_ABSTRACT_TERMS.has(tok))) continue;
     cleaned.push(val);
   }
   const unique = Array.from(new Set(cleaned));
@@ -1298,11 +1335,12 @@ function questPromptForSynopsis(count, lang){
   const n = count || 4;
   const langName = langCodeToName(lang);
   return [
-    "You are given a book synopsis.",
-    `List exactly ${n} concrete physical objects from the story.`,
-    "Avoid spoilers. Only tangible items, no abstract concepts.",
-    "Order by story progression.",
-    `Reply ONLY with a JSON array of exactly ${n} short names in ${langName}, lowercase.`
+    "You are given a summary of a book's plot.",
+    `Invent exactly ${n} concrete, tangible objects a reader could physically hold, one per key story element (a character, faction, place, rule or idea mentioned below).`,
+    "If the element itself isn't physical (an organization, a title, a system, a concept), turn it into a believable prop by pairing it with an everyday object: a spy agency becomes its badge, a ruler's title becomes their sealed decree, a rationing rule becomes a ration ticket, a journey through time becomes a time machine.",
+    "Every object must connect to something actually mentioned in the summary below, not to unrelated generic ideas.",
+    "Order the objects by story progression, earliest first, to avoid spoiling the ending.",
+    `Reply ONLY with a JSON array of exactly ${n} short object names in ${langName}, lowercase.`
   ].join(" ");
 }
 
@@ -1726,6 +1764,7 @@ async function generateQuestObjectsForBook(book, options){
     setQuestStatus(book.id, "starting quest generation");
     chosen = questSourceText(book);
     const synopsis = chosen.text;
+    const sameLang = plotSourceSameLanguage(book, chosen.source, lang);
     if(synopsis){
       setQuestStatus(book.id, `using ${chosen.source} text (${synopsisRichness(synopsis)} distinct words)`);
     }
@@ -1755,6 +1794,13 @@ async function generateQuestObjectsForBook(book, options){
           objects = sanitizeQuestObjects(retryRaw, count);
         }
       }catch(_){}
+      if(objects && objects.length){
+        const grounded = groundQuestObjects(objects, synopsis, sameLang);
+        if(!grounded.length){
+          setQuestStatus(book.id, "Chrome AI output not grounded in source text → discarded");
+        }
+        objects = grounded;
+      }
       if(objects && objects.length){
         setQuestStatus(book.id, "Chrome AI success");
         commitObjects(objects, "window-ai");
@@ -1788,6 +1834,13 @@ async function generateQuestObjectsForBook(book, options){
         }
       }catch(_){}
       if(objects && objects.length){
+        const grounded = groundQuestObjects(objects, synopsis, sameLang);
+        if(!grounded.length){
+          setQuestStatus(book.id, "WebLLM output not grounded in source text → discarded");
+        }
+        objects = grounded;
+      }
+      if(objects && objects.length){
         setQuestStatus(book.id, "WebLLM success");
         commitObjects(objects, "webgpu-llm");
         return;
@@ -1819,6 +1872,13 @@ async function generateQuestObjectsForBook(book, options){
           objects = sanitizeQuestObjects(retryRaw, count);
         }
       }catch(_){}
+      if(objects && objects.length){
+        const grounded = groundQuestObjects(objects, synopsis, sameLang);
+        if(!grounded.length){
+          setQuestStatus(book.id, "Transformers.js output not grounded in source text → discarded");
+        }
+        objects = grounded;
+      }
       if(objects && objects.length){
         setQuestStatus(book.id, "Transformers.js success");
         commitObjects(objects, "transformers-js");
@@ -2627,6 +2687,7 @@ function renderQuestDebug(book){
     `Plot summary: ${(book.plotSummary || "").length} chars (${synopsisRichness(book.plotSummary || "")} distinct words)`,
     `Plot source: ${plot.article ? `${plot.lang}:${plot.article} \u00a7${plot.section || "?"}` : "\u2014"}`,
     `Text fed to AI: ${questSourceText(book).source || "\u2014"}`,
+    `Grounding check: ${plotSourceSameLanguage(book, questSourceText(book).source, book.language || (state.settings && state.settings.lang) || "en-GB") ? "on" : "off (language unconfirmed)"}`,
     `Synopsis: ${synopsis || "—"}`,
     `Quest method: ${method || "—"} (${methodLabel})`,
     `Quest generatedAt: ${quest.generatedAt || "—"}`,
