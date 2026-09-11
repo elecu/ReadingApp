@@ -196,21 +196,6 @@ textarea{min-height:96px;resize:vertical}
   flex-direction:column;
   gap:6px;
 }
-.aiProgress{
-  width:100%;
-  height:6px;
-  border-radius:999px;
-  background:rgba(255,255,255,0.08);
-  overflow:hidden;
-  display:none;
-}
-.aiProgress.show{display:block}
-.aiProgressBar{
-  height:100%;
-  width:0%;
-  background:linear-gradient(90deg, #6cf5c0, #4ce59f);
-}
-
 .sessionCoverWrap{
   margin-top:14px;
   display:flex;

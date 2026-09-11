@@ -191,6 +191,16 @@
             </details>
 
             <details>
+              <summary data-i18n="rereadSectionTitle">Reread a finished book</summary>
+              <div class="row">
+                <div class="field grow">
+                  <select id="rereadSelect"></select>
+                </div>
+                <button class="btn" id="startReread" type="button" data-i18n="rereadButton">Start reread</button>
+              </div>
+            </details>
+
+            <details>
               <summary data-i18n="editBookSummary">Edit active book</summary>
               <div class="formGrid">
                 <div class="field">
@@ -242,6 +252,16 @@
                   </div>
                 </div>
               </div>
+            </details>
+
+            <details>
+              <summary data-i18n="readBooksTitle">Read books</summary>
+              <div class="row">
+                <div class="field grow">
+                  <select id="readBooksSelect"></select>
+                </div>
+              </div>
+              <div id="readBooksInfo"></div>
             </details>
 
             <details class="debugPanel">
@@ -513,16 +533,8 @@
                   <span data-i18n="plotToggleLabel">Use Wikipedia plot summaries (richer objects, opening section only)</span>
                 </label>
               </div>
-              <div class="row">
-                <button class="btn" id="aiClearModel" type="button" data-i18n="aiClearModel">Clear downloaded model</button>
-                <button class="btn" id="aiReload" type="button" data-i18n="aiReload">Reload</button>
-              </div>
-              <div class="small" data-i18n="aiClearHint">Clears on-device model files (may require a refresh).</div>
               <div class="aiStatus">
                 <div class="small" id="aiDownloadStatus"></div>
-                <div class="aiProgress" aria-hidden="true">
-                  <div class="aiProgressBar" id="aiDownloadBar"></div>
-                </div>
               </div>
             </div>
 

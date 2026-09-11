@@ -16,13 +16,13 @@ const api = global.window.BOOKQUEST_TEST_API;
 
 const book = { id: "b1", title: "Moscow 2042", author: "Vladimir Voinovich" };
 
-test("requestCloudQuestObjects sends the resolved synopsis and app key, returns objects on success", async () => {
+test("requestCloudQuestObjects sends the resolved synopsis and app key, returns the shared pool on success", async () => {
   let seen = null;
   global.fetch = async (url, opts) => {
     seen = { url, opts };
     return {
       ok: true,
-      json: async () => ({ objects: ["time machine", "wall", "horse"], cached: false })
+      json: async () => ({ pool: ["time machine", "wall", "horse"], cached: false })
     };
   };
   const result = await api.requestCloudQuestObjects(book, 4, "en", "Kartsev travels through time.", true);

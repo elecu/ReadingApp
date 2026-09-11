@@ -7,7 +7,10 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 180;
 const QUEST_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8";
 const QUEST_SYNOPSIS_MAX_CHARS = 1800;
 const QUEST_COUNT_MIN = 2;
-const QUEST_COUNT_MAX = 8;
+// Sanity ceiling on how large one book's shared pool can grow -- a
+// safeguard against runaway storage/cost, not a target every book should
+// reach. Mirrors QUEST_POOL_MAX in app.js.
+const QUEST_COUNT_MAX = 50;
 const QUEST_DEFAULT_DAILY_CAP = 150;
 const QUEST_BUDGET_TTL_SECONDS = 60 * 60 * 36;
 
@@ -242,7 +245,8 @@ function buildQuestPrompt(title, author, count, lang, synopsis){
       "(1) Only name objects a reader could physically hold, wear, or carry -- never abstract ideas, organizations, titles, or character names.",
       "(2) If a key plot element is not itself physical, name a real physical object closely tied to it instead (example: a spy agency -> its badge).",
       "(3) Every object must be clearly traceable to specific text in the synopsis provided -- do not invent generic genre tropes that are not mentioned.",
-      `(4) Reply with ONLY a JSON array of exactly ${count} short lowercase strings in ${lang || "English"}, ordered earliest-appearing first.`,
+      `(4) Find every such object the text genuinely supports, up to ${count} -- fewer is correct and expected if the text doesn't support more, do not pad the list.`,
+      `(5) Reply with ONLY a JSON array of short lowercase strings in ${lang || "English"}, ordered earliest-appearing first.`,
       "No prose, no markdown fences, no explanation -- the array is the entire reply."
     ].join(" "),
     user: `Title: ${title}\nAuthor: ${author || ""}\nSynopsis: ${synopsis}`
@@ -282,8 +286,10 @@ function sanitizeObjects(raw, count){
     cleaned.push(val);
   }
   const unique = Array.from(new Set(cleaned));
-  const min = Math.max(1, (count || QUEST_COUNT_MIN) - 1);
-  if(unique.length < min) return null;
+  // Absolute floor, not relative to `count`: with an open-ended "find up to
+  // 50" ask, returning far fewer is the correct result for a short synopsis,
+  // not a sign the model failed.
+  if(!unique.length) return null;
   return unique.slice(0, count || QUEST_COUNT_MAX);
 }
 
@@ -315,6 +321,21 @@ async function checkAppKey(request, env){
   return request.headers.get("X-App-Key") === env.QUEST_APP_KEY;
 }
 
+// Dedup (case-insensitive) and fold newObjects into the existing shared
+// pool, capped at QUEST_COUNT_MAX -- never overwrites, only grows.
+function mergePool(existing, newObjects){
+  const seen = new Set((existing || []).map(o => o.toLowerCase()));
+  const merged = (existing || []).slice();
+  for(const obj of (newObjects || [])){
+    const key = obj.toLowerCase();
+    if(seen.has(key)) continue;
+    seen.add(key);
+    merged.push(obj);
+    if(merged.length >= QUEST_COUNT_MAX) break;
+  }
+  return merged;
+}
+
 async function handleQuestObjects(request, env){
   if(request.method !== "POST"){
     return jsonResponse(request, env, { error: "method_not_allowed" }, 405);
@@ -336,7 +357,10 @@ async function handleQuestObjects(request, env){
   const author = String(body && body.author || "").trim().slice(0, 300);
   const lang = String(body && body.lang || "en").trim().slice(0, 10);
   const sameLanguage = Boolean(body && body.sameLanguage);
-  const count = Math.min(QUEST_COUNT_MAX, Math.max(QUEST_COUNT_MIN, Number(body && body.count) || 4));
+  // How large the caller wants the pool to be -- an open-ended "find up to
+  // this many" ask, not an exact quota. Defaults high (the pool-filling
+  // case) since most callers now ask for QUEST_POOL_MAX from the client.
+  const count = Math.min(QUEST_COUNT_MAX, Math.max(QUEST_COUNT_MIN, Number(body && body.count) || QUEST_COUNT_MAX));
   const synopsis = String(body && body.synopsis || "").trim().slice(0, QUEST_SYNOPSIS_MAX_CHARS);
   if(!title || !synopsis){
     return jsonResponse(request, env, { error: "invalid_input" }, 400);
@@ -344,8 +368,13 @@ async function handleQuestObjects(request, env){
 
   const cacheKey = await questCacheKey(title, author, lang);
   const cached = await env.BOOKQUEST_KV.get(cacheKey, { type: "json" });
-  if(cached && Array.isArray(cached.objects) && cached.objects.length){
-    return jsonResponse(request, env, { objects: cached.objects.slice(0, count), cached: true });
+  const existingPool = (cached && Array.isArray(cached.objects)) ? cached.objects : [];
+
+  // The pool already covers what this caller needs -- return it as-is,
+  // never touching the model or the budget counter. This is what makes a
+  // reread of an already-known book instant and free for every user.
+  if(existingPool.length >= count){
+    return jsonResponse(request, env, { pool: existingPool, cached: true });
   }
 
   const budgetKey = `quest-budget:${todayKey()}`;
@@ -353,10 +382,14 @@ async function handleQuestObjects(request, env){
   const usedRaw = await env.BOOKQUEST_KV.get(budgetKey);
   const used = Number(usedRaw) || 0;
   if(used >= cap){
+    // A short/partial pool is still useful -- hand back what exists rather
+    // than a hard error, and let the caller's own fallback chain fill in
+    // the rest for this one request.
+    if(existingPool.length) return jsonResponse(request, env, { pool: existingPool, cached: true });
     return jsonResponse(request, env, { error: "budget_exceeded" }, 200);
   }
 
-  let objects = null;
+  let fresh = null;
   try{
     const prompt = buildQuestPrompt(title, author, count, lang, synopsis);
     const text = await callQuestModel(env, prompt);
@@ -364,21 +397,23 @@ async function handleQuestObjects(request, env){
     // here regardless of whether the response turns out to be usable.
     await env.BOOKQUEST_KV.put(budgetKey, String(used + 1), { expirationTtl: QUEST_BUDGET_TTL_SECONDS });
     const raw = extractJsonArray(text);
-    objects = sanitizeObjects(raw, count);
-    if(objects && objects.length && sameLanguage){
-      const grounded = groundObjects(objects, synopsis);
-      objects = grounded.length ? grounded : null;
+    fresh = sanitizeObjects(raw, count);
+    if(fresh && fresh.length && sameLanguage){
+      const grounded = groundObjects(fresh, synopsis);
+      fresh = grounded.length ? grounded : null;
     }
   }catch(_){
-    objects = null;
+    fresh = null;
   }
 
-  if(!objects || !objects.length){
+  if(!fresh || !fresh.length){
+    if(existingPool.length) return jsonResponse(request, env, { pool: existingPool, cached: true });
     return jsonResponse(request, env, { error: "model_error" }, 200);
   }
 
-  await env.BOOKQUEST_KV.put(cacheKey, JSON.stringify({ objects, generatedAt: new Date().toISOString(), model: QUEST_MODEL }));
-  return jsonResponse(request, env, { objects, cached: false });
+  const merged = mergePool(existingPool, fresh);
+  await env.BOOKQUEST_KV.put(cacheKey, JSON.stringify({ objects: merged, updatedAt: new Date().toISOString(), model: QUEST_MODEL }));
+  return jsonResponse(request, env, { pool: merged, cached: false });
 }
 
 export default {
