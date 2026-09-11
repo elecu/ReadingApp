@@ -1,0 +1,15 @@
+name = "bookquest-backend"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+[[kv_namespaces]]
+binding = "BOOKQUEST_KV"
+id = "36833db937a94d1b81ff58e02a006057"
+
+[ai]
+binding = "AI"
+
+[vars]
+APP_ORIGIN = "https://elecu.github.io"
+BASE_URL = "https://bookquest-backend.lordquark.workers.dev"
+QUEST_DAILY_CAP = "150"
